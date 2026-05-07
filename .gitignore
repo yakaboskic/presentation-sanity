@@ -216,3 +216,14 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Node / Slidev
+node_modules/
+.slidev/
+dist/
+*-export/
+*.local
+.DS_Store
+
+# presentation-sanity build outputs
+out/
