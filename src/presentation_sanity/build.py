@@ -31,8 +31,21 @@ def build_all(
     manifest = load_manifest(root)
     print(f"  manifest: {len(manifest.variables)} variables, {len(manifest.scenes)} scenes")
 
-    if skip_manim or not manifest.scenes:
-        print("  skipping manim rendering")
+    # Decide whether to render manim. Auto-skip if the package isn't
+    # installed so the build still completes (slidev portion runs fine
+    # against pre-rendered videos sitting in public/manim/).
+    manim_available = manim_render.is_manim_available()
+    auto_skip = not skip_manim and manifest.scenes and not manim_available
+
+    if skip_manim:
+        print("  skipping manim rendering (--skip-manim)")
+    elif not manifest.scenes:
+        print("  no scenes declared — skipping manim")
+    elif auto_skip:
+        print(
+            "  manim not installed — skipping render. "
+            "install with `pip install presentation-sanity[manim]` to render scenes."
+        )
     else:
         statuses = manim_render.render_scenes(
             manifest, force=force_manim, verbose=verbose

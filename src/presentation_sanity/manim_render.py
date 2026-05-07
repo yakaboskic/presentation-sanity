@@ -8,6 +8,7 @@ Cache lives in `.cache/manim.json` next to manifest.yaml.
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import shutil
 import subprocess
@@ -18,6 +19,16 @@ from pathlib import Path
 from typing import Any
 
 from .manifest import Manifest, Scene
+
+
+def is_manim_available() -> bool:
+    """True if the `manim` package is importable from the current Python.
+
+    Used by `build_all` to gracefully skip rendering when manim isn't
+    installed. Matches what the subprocess (`sys.executable -m manim`)
+    would see, so the two checks stay consistent.
+    """
+    return importlib.util.find_spec("manim") is not None
 
 QUALITY_DIR = {
     "l": "480p15",

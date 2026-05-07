@@ -38,6 +38,14 @@ def cmd_build_manim(args: argparse.Namespace) -> int:
     from . import manim_render
     from .manifest import ManifestError, load_manifest
 
+    if not manim_render.is_manim_available():
+        print(
+            "  error: manim is not installed.\n"
+            "  install with: pip install presentation-sanity[manim]",
+            file=sys.stderr,
+        )
+        return 1
+
     try:
         manifest = load_manifest(Path(args.root).resolve())
         statuses = manim_render.render_scenes(
