@@ -15,6 +15,7 @@ def build_all(
     skip_manim: bool = False,
     force_manim: bool = False,
     skip_slidev: bool = False,
+    base: str | None = None,
     verbose: bool = False,
 ) -> None:
     """Run the full pipeline against the deck at `root`.
@@ -58,6 +59,9 @@ def build_all(
     if skip_slidev:
         print("  skipping slidev build")
     else:
-        print("  running slidev build...")
-        slidev.build(root, verbose=verbose)
+        if base is not None:
+            print(f"  running slidev build (base={base})...")
+        else:
+            print("  running slidev build...")
+        slidev.build(root, base=base, verbose=verbose)
         print(f"  done → {root / 'dist'}")

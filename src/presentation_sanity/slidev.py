@@ -26,10 +26,18 @@ def _check_node_modules(root: Path) -> None:
         )
 
 
-def build(root: Path, *, verbose: bool = False) -> None:
+def build(root: Path, *, base: str | None = None, verbose: bool = False) -> None:
+    """Run `npx slidev build` against the deck at `root`.
+
+    `base` (optional) is forwarded to slidev as `--base <value>` and lets
+    the built site be served from a subdirectory. Pass e.g. `./` for
+    fully relative asset paths, or `/preview/abc/` for a known prefix.
+    """
     _check_npx()
     _check_node_modules(root)
     cmd = ["npx", "slidev", "build"]
+    if base is not None:
+        cmd.extend(["--base", base])
     if verbose:
         print(f"  $ (cwd={root}) {' '.join(cmd)}", file=sys.stderr)
     subprocess.run(cmd, cwd=root, check=True)

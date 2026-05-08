@@ -19,6 +19,7 @@ def cmd_build(args: argparse.Namespace) -> int:
             skip_manim=args.skip_manim,
             force_manim=args.force_manim,
             skip_slidev=args.skip_slidev,
+            base=args.base,
             verbose=args.verbose,
         )
         return 0
@@ -152,6 +153,15 @@ def build_parser() -> argparse.ArgumentParser:
     p_build.add_argument("--skip-slidev", action="store_true")
     p_build.add_argument(
         "--force-manim", action="store_true", help="Re-render all scenes ignoring cache"
+    )
+    p_build.add_argument(
+        "--base",
+        default=None,
+        help=(
+            "Forward to `slidev build --base <value>` so the built site can be "
+            "served from a subdirectory. Use './' for relative asset paths, or a "
+            "specific prefix like '/preview/abc/'."
+        ),
     )
     p_build.set_defaults(func=cmd_build)
 
