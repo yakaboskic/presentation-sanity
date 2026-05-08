@@ -11,11 +11,17 @@ applied to slide decks instead of papers.
 | Command | What runs | When to use |
 |---|---|---|
 | `presentation-sanity build` | Validate manifest → render stale manim scenes → `slidev build` → `dist/` | Build the deck. |
+| `presentation-sanity build --base ./` | Same, but forwards `--base` to `slidev build`/Vite | Deploy to a subdirectory (e.g. `https://host/preview/abc/`). |
 | `presentation-sanity dev` | `slidev` with hot reload | Iterate on slide content. |
 | `presentation-sanity build-manim` | Render only stale manim scenes | When you've edited a `.py` scene file. |
 | `presentation-sanity preview` | `python http.server` on `dist/` | Smoke-test the static build locally (browsers won't load `file://`). |
 | `presentation-sanity export pdf` | `slidev export` | PDF output. |
 | `presentation-sanity export pptx` | `slidev export --format pptx` | PowerPoint — slides as full-bleed images (limited fidelity by design). |
+
+`build` degrades gracefully when manim isn't installed: it logs a clear
+message and continues to `slidev build`, using whatever pre-rendered
+videos already live in `public/manim/`. So a deploy environment never
+needs cairo/pango/native build tools as long as you committed the videos.
 
 ## How it fits together
 
@@ -56,8 +62,12 @@ as your starting point — clone it (or use it as a GitHub template) and edit.
 name = "my-talk"
 version = "0.1.0"
 requires-python = ">=3.10"
+# Default install does NOT pull manim — pre-rendered videos in
+# public/manim/ travel with the deck, so deploy environments don't
+# need cairo/pango/native build tools.
+# To render scenes locally, switch to `presentation-sanity[manim]`.
 dependencies = [
-    "presentation-sanity[manim] @ git+https://github.com/yakaboskic/presentation-sanity.git@main",
+    "presentation-sanity @ git+https://github.com/yakaboskic/presentation-sanity.git@main",
 ]
 
 [build-system]
@@ -95,11 +105,31 @@ bypass-selection = true        # the deck repo has no importable Python
 Then:
 
 ```bash
-uv sync                                   # installs presentation-sanity[manim]
+uv sync                                   # installs presentation-sanity (no manim by default)
 npm install                               # installs Slidev side
 uv run presentation-sanity build          # full pipeline → dist/
 uv run presentation-sanity preview        # http://localhost:8000
 ```
+
+To render manim scenes locally, swap the dep to
+`presentation-sanity[manim]` and `uv sync` again. The `[manim]` extra pulls
+manim + cairo + pango bindings; once the videos are rendered into
+`public/manim/`, you can drop `[manim]` for deploy.
+
+## Subdirectory deploys
+
+`vite.config.ts` ships with `base: './'`, so the built `dist/` works
+unchanged when served from any URL prefix (`https://host/preview/abc/`,
+`https://host/talks/2026/`, etc.). To override per-build, pass
+`--base` through:
+
+```bash
+presentation-sanity build --base ./           # relative paths (default)
+presentation-sanity build --base /talks/2026/ # known prefix
+```
+
+The `manim` layout uses `import.meta.env.BASE_URL` so video URLs follow
+the same rule — no extra config needed.
 
 ## Install the tool directly
 
@@ -135,8 +165,8 @@ my-talk/
 │   └── manim.vue           # full-screen manim layout (lowercase = layout name)
 ├── scenes/
 │   └── intro.py            # manim source files
-├── public/                 # static assets — absolute paths from /
-│   └── manim/              # rendered videos (gitignored)
+├── public/                 # static assets — paths follow Vite's base
+│   └── manim/              # rendered videos — committed alongside source
 └── dist/                   # build output (gitignored)
 ```
 
@@ -195,13 +225,18 @@ with no SPA fallback configuration.
 
 ## System dependencies
 
-For manim:
+Only required when you want to **render manim scenes locally** (i.e.,
+when you've installed the `[manim]` extra):
+
 - macOS: `brew install ffmpeg cairo pango`
 - Linux: `apt install ffmpeg libcairo2-dev libpango1.0-dev` (or distro equivalent)
 - LaTeX is required for `MathTex`. Install [TeX Live](https://tug.org/texlive/) or BasicTeX.
 
-Without manim, you can still build text/data slides — `presentation-sanity
-build --skip-manim` skips scene rendering entirely.
+If you're just building/deploying a deck whose videos are already
+rendered (committed in `public/manim/`), you don't need any of these —
+`presentation-sanity build` auto-skips manim with a log line and runs
+`slidev build` against the existing videos. Pass `--skip-manim`
+explicitly if you want the same behavior even when manim *is* installed.
 
 ## Library inspiration
 
