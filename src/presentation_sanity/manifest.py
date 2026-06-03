@@ -84,11 +84,44 @@ class Scene:
 
 
 @dataclass
+class Figure:
+    """One entry under `figures:` in the manifest.
+
+    An Excalidraw source (`<name>.excalidraw`) exported to a static image at
+    `public/figures/<key>.<format>` by `presentation-sanity build-figures`.
+    Mirrors `Scene` (manim) — same source→public/cache→Slidev shape.
+    """
+
+    key: str
+    source: Path
+    format: str = "svg"          # svg | png
+    scale: float = 1.0
+    background: bool = False     # transparent by default (reads on any theme)
+    dark: bool = False           # dark-mode export
+    embed_scene: bool = False    # embed editable scene data in the export
+
+    @classmethod
+    def from_raw(cls, key: str, raw: dict[str, Any], root: Path) -> "Figure":
+        if "source" not in raw:
+            raise ManifestError(f"figure {key!r} missing required 'source' field")
+        return cls(
+            key=key,
+            source=(root / raw["source"]).resolve(),
+            format=raw.get("format", "svg"),
+            scale=float(raw.get("scale", 1.0)),
+            background=bool(raw.get("background", False)),
+            dark=bool(raw.get("dark", False)),
+            embed_scene=bool(raw.get("embed_scene", False)),
+        )
+
+
+@dataclass
 class Manifest:
     root: Path
     metadata: dict[str, Any] = field(default_factory=dict)
     variables: dict[str, Variable] = field(default_factory=dict)
     scenes: dict[str, Scene] = field(default_factory=dict)
+    figures: dict[str, Figure] = field(default_factory=dict)
 
 
 class ManifestError(Exception):
@@ -124,9 +157,21 @@ def load_manifest(root: Path) -> Manifest:
                 file=sys.stderr,
             )
 
+    figures_raw = raw.get("figures") or {}
+    figures = {
+        key: Figure.from_raw(key, val, root) for key, val in figures_raw.items()
+    }
+    for figure in figures.values():
+        if not figure.source.is_file():
+            print(
+                f"  warning: figure {figure.key!r} source {figure.source} not found",
+                file=sys.stderr,
+            )
+
     return Manifest(
         root=root,
         metadata=raw.get("metadata") or {},
         variables=variables,
         scenes=scenes,
+        figures=figures,
     )

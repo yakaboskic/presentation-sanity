@@ -10,11 +10,12 @@ applied to slide decks instead of papers.
 
 | Command | What runs | When to use |
 |---|---|---|
-| `presentation-sanity build` | Validate manifest → render stale manim scenes → `slidev build` → `dist/` | Build the deck. |
+| `presentation-sanity build` | Validate manifest → render stale manim scenes → `slidev build` → `site/` | Build the deck. |
 | `presentation-sanity build --base ./` | Same, but forwards `--base` to `slidev build`/Vite | Deploy to a subdirectory (e.g. `https://host/preview/abc/`). |
 | `presentation-sanity dev` | `slidev` with hot reload | Iterate on slide content. |
 | `presentation-sanity build-manim` | Render only stale manim scenes | When you've edited a `.py` scene file. |
-| `presentation-sanity preview` | `python http.server` on `dist/` | Smoke-test the static build locally (browsers won't load `file://`). |
+| `presentation-sanity build-figures` | Export only stale Excalidraw figures | When you've edited an `.excalidraw` figure source. |
+| `presentation-sanity preview` | `python http.server` on `site/` | Smoke-test the static build locally (browsers won't load `file://`). |
 | `presentation-sanity export pdf` | `slidev export` | PDF output. |
 | `presentation-sanity export pptx` | `slidev export --format pptx` | PowerPoint — slides as full-bleed images (limited fidelity by design). |
 
@@ -22,6 +23,16 @@ applied to slide decks instead of papers.
 message and continues to `slidev build`, using whatever pre-rendered
 videos already live in `public/manim/`. So a deploy environment never
 needs cairo/pango/native build tools as long as you committed the videos.
+
+**Figures (Excalidraw → image).** Declare `.excalidraw` sources under
+`figures:` in the manifest; `build-figures` exports each to
+`public/figures/<key>.<format>` (content-hash cached, same as manim).
+Export uses [`excalidraw-brute-export-cli`](https://github.com/realazthat/excalidraw-brute-export-cli)
+(Playwright + Firefox) via `npx`; first run needs `npx playwright install firefox`.
+The exporter is **optional** — `build` auto-skips figure export when it isn't
+installed and uses the committed images in `public/figures/`, so deploys never
+need a headless browser. Reference figures from a slide with the `<Figure>`
+component or the `image` layout.
 
 ## How it fits together
 
@@ -33,8 +44,12 @@ components/    │     ├─► validate manifest
 public/        │     ├─► render stale manim scenes (cached by content hash)
 style.css      │     │     → public/manim/<key>.webm
 layouts/*.vue  ┘     └─► npx slidev build
-                           → dist/  (static, deployable to any HTTP host)
+                           → site/  (static, deployable to any HTTP host)
 ```
+
+> The output dir defaults to **`site/`** (not `dist`/`build`/`out`, which many
+> static hosts and deploy tools auto-ignore). Override with `build --out <dir>`;
+> pass the same `--out` to `preview`.
 
 - **`manifest.yaml`** — the deck's single source of config. Variables (with
   provenance metadata), manim scenes, theme settings.
@@ -107,7 +122,7 @@ Then:
 ```bash
 uv sync                                   # installs presentation-sanity (no manim by default)
 npm install                               # installs Slidev side
-uv run presentation-sanity build          # full pipeline → dist/
+uv run presentation-sanity build          # full pipeline → site/
 uv run presentation-sanity preview        # http://localhost:8000
 ```
 
@@ -118,7 +133,7 @@ manim + cairo + pango bindings; once the videos are rendered into
 
 ## Subdirectory deploys
 
-`vite.config.ts` ships with `base: './'`, so the built `dist/` works
+`vite.config.ts` ships with `base: './'`, so the built `site/` works
 unchanged when served from any URL prefix (`https://host/preview/abc/`,
 `https://host/talks/2026/`, etc.). To override per-build, pass
 `--base` through:
@@ -167,7 +182,7 @@ my-talk/
 │   └── intro.py            # manim source files
 ├── public/                 # static assets — paths follow Vite's base
 │   └── manim/              # rendered videos — committed alongside source
-└── dist/                   # build output (gitignored)
+└── site/                   # build output (gitignored; not "dist" — see build notes)
 ```
 
 ## manifest.yaml
@@ -198,6 +213,15 @@ scenes:
     class: "IntroScene"
     quality: "h"            # l | m | h | p | k
     format: "webm"
+
+figures:
+  pipeline:
+    source: "excalidraw/pipeline.excalidraw"
+    format: "svg"           # svg | png  (default svg)
+    scale: 1                # export scale (default 1)
+    background: false       # transparent by default
+    dark: false             # dark-mode export
+    embed_scene: false      # embed editable scene data in the export
 ```
 
 ## Slide patterns
@@ -219,7 +243,7 @@ scene: intro
 (optional caption text — overlaid at bottom)
 ```
 
-**Static hosting:** `dist/` is fully self-contained. The deck uses **hash
+**Static hosting:** `site/` is fully self-contained. The deck uses **hash
 routing** so URLs work on any dumb static host (S3, R2, GitHub Pages, Netlify)
 with no SPA fallback configuration.
 

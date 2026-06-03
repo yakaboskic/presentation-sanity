@@ -11,6 +11,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+# Default build-output directory. Deliberately NOT "dist"/"build"/"out" — those
+# names are on the default ignore lists of many static hosts and deploy tools,
+# which silently skip the build when serving. "site" is neutral and picked up.
+DEFAULT_OUT = "site"
+
 
 def _check_npx() -> None:
     if shutil.which("npx") is None:
@@ -26,16 +31,25 @@ def _check_node_modules(root: Path) -> None:
         )
 
 
-def build(root: Path, *, base: str | None = None, verbose: bool = False) -> None:
+def build(
+    root: Path,
+    *,
+    base: str | None = None,
+    out: str = DEFAULT_OUT,
+    verbose: bool = False,
+) -> None:
     """Run `npx slidev build` against the deck at `root`.
 
     `base` (optional) is forwarded to slidev as `--base <value>` and lets
     the built site be served from a subdirectory. Pass e.g. `./` for
     fully relative asset paths, or `/preview/abc/` for a known prefix.
+
+    `out` is the output directory (forwarded as `--out`), default
+    `DEFAULT_OUT` ("site") rather than slidev's "dist".
     """
     _check_npx()
     _check_node_modules(root)
-    cmd = ["npx", "slidev", "build"]
+    cmd = ["npx", "slidev", "build", "--out", out]
     if base is not None:
         cmd.extend(["--base", base])
     if verbose:

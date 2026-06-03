@@ -30,6 +30,59 @@ def is_manim_available() -> bool:
     """
     return importlib.util.find_spec("manim") is not None
 
+
+def ffmpeg_path() -> str | None:
+    """Return the ffmpeg executable on PATH, or None if not installed.
+
+    ffmpeg is optional: it backs the last-frame *poster* extraction. When
+    absent we skip posters (and warn) rather than failing the build.
+    """
+    return shutil.which("ffmpeg")
+
+
+def poster_path_for(video_path: Path) -> Path:
+    """Poster image path for a rendered scene video.
+
+    `public/manim/<key>.<fmt>` → `public/manim/<key>.poster.png`. The manim
+    layout points its `<video poster>` here so the *last* frame (usually the
+    finished/summary diagram) shows wherever the video can't play: the initial
+    paint, and — crucially — static PDF/PPTX exports.
+    """
+    return video_path.with_suffix(".poster.png")
+
+
+def _extract_poster(video: Path, poster: Path, *, verbose: bool = False) -> bool:
+    """Grab the LAST frame of `video` into `poster` (png) via ffmpeg.
+
+    `-sseof -1` seeks to one second before the end, then a single output frame
+    with `-update 1` leaves the final decoded frame on disk. Returns True on
+    success, False if ffmpeg is unavailable or errored — for posters that's
+    non-fatal, the caller just continues.
+    """
+    ff = ffmpeg_path()
+    if ff is None:
+        return False
+    poster.parent.mkdir(parents=True, exist_ok=True)
+    cmd = [
+        ff, "-y",
+        "-sseof", "-1",
+        "-i", str(video),
+        "-update", "1",
+        "-frames:v", "1",
+        "-q:v", "2",
+        str(poster),
+    ]
+    if verbose:
+        print(f"  $ {' '.join(cmd)}", file=sys.stderr)
+    proc = subprocess.run(
+        cmd,
+        stdout=subprocess.DEVNULL,
+        stderr=None if verbose else subprocess.DEVNULL,
+        check=False,
+    )
+    return proc.returncode == 0 and poster.is_file()
+
+
 QUALITY_DIR = {
     "l": "480p15",
     "m": "720p30",
@@ -132,11 +185,18 @@ def render_scenes(
     verbose: bool = False,
 ) -> dict[str, str]:
     """Render every scene in the manifest. Returns {key: status} where status
-    is one of "rendered", "cached", "skipped" (no source file)."""
+    is one of "rendered", "cached", "skipped" (no source file).
+
+    After (re)rendering — and for cached scenes whose poster has gone missing —
+    a last-frame poster is extracted to `<key>.poster.png` (best effort; needs
+    ffmpeg). The poster lets the manim layout show the finished/summary frame
+    wherever the video can't play (initial paint, static PDF/PPTX export).
+    """
     cache_path = manifest.root / ".cache" / "manim.json"
     cache = _load_cache(cache_path)
     out_dir = manifest.root / "public" / "manim"
     statuses: dict[str, str] = {}
+    poster_warned = False
 
     for key, scene in manifest.scenes.items():
         if not scene.source.is_file():
@@ -144,6 +204,7 @@ def render_scenes(
             continue
 
         out_file = out_dir / f"{key}.{scene.format}"
+        poster_file = poster_path_for(out_file)
         current_hash = _scene_hash(scene)
         cached = cache.get(key, {})
         is_fresh = (
@@ -154,6 +215,17 @@ def render_scenes(
 
         if is_fresh:
             statuses[key] = "cached"
+            # Regenerate a poster that was deleted or never made (older cache).
+            if not poster_file.is_file() and out_file.is_file():
+                if ffmpeg_path() is None:
+                    if not poster_warned:
+                        print(
+                            "  note: ffmpeg not found — skipping last-frame posters "
+                            "(manim slides fall back to a black frame in exports)."
+                        )
+                        poster_warned = True
+                elif _extract_poster(out_file, poster_file, verbose=verbose):
+                    print(f"  {key}: poster")
             continue
 
         print(f"  rendering scene {key!r} ({scene.source.name}::{scene.class_name})")
@@ -163,6 +235,16 @@ def render_scenes(
             "output": str(out_file.relative_to(manifest.root)),
         }
         statuses[key] = "rendered"
+
+        if ffmpeg_path() is None:
+            if not poster_warned:
+                print(
+                    "  note: ffmpeg not found — skipping last-frame posters "
+                    "(manim slides fall back to a black frame in exports)."
+                )
+                poster_warned = True
+        elif _extract_poster(out_file, poster_file, verbose=verbose):
+            cache[key]["poster"] = str(poster_file.relative_to(manifest.root))
 
     _save_cache(cache_path, cache)
     return statuses

@@ -11,6 +11,7 @@ dependencies = [
 
 [project.optional-dependencies]
 manim = ["manim>=0.18"]
+pptx = ["python-pptx>=0.6"]
 
 [project.scripts]
 presentation-sanity = "presentation_sanity.cli:main"
