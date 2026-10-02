@@ -366,14 +366,13 @@ as your starting point — clone it (or use it as a GitHub template) and edit.
 name = "my-talk"
 version = "0.1.0"
 requires-python = ">=3.10"
-# Default install does NOT pull manim — pre-rendered videos in
-# public/manim/ travel with the deck, so deploy environments don't
-# need cairo/pango/native build tools.
-# To render scenes locally, switch to `presentation-sanity[manim]`.
+# The [manim] extra lets `build` render scenes (the machine needs ffmpeg,
+# cairo, pango and LaTeX); drop it for a deploy environment that only
+# serves committed videos from public/manim/.
 # Pin a release tag (https://github.com/yakaboskic/presentation-sanity/releases),
 # not @main; to upgrade, change the tag and run `uv lock`.
 dependencies = [
-    "presentation-sanity @ git+https://github.com/yakaboskic/presentation-sanity.git@v0.3.0",
+    "presentation-sanity[manim] @ git+https://github.com/yakaboskic/presentation-sanity.git@v0.3.0",
 ]
 
 [build-system]
@@ -484,9 +483,9 @@ only through a release:
    gh release create vX.Y.Z --verify-tag --title "vX.Y.Z — summary" --notes-file notes.md
    ```
 3. Move the template to it: in `presentation-sanity-template`, change the tag in
-   `pyproject.toml` (the dependency line and the `[manim]` comment), the README
-   and its "Upgrading presentation-sanity" example; run `uv lock`, build the
-   example presentation, and push.
+   the `pyproject.toml` dependency line and in the README's "Upgrading
+   presentation-sanity" example; run `uv lock`, build the example presentation
+   (it renders its manim scene), and push.
 
 ## Subject layout
 
