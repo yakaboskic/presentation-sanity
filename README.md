@@ -370,8 +370,10 @@ requires-python = ">=3.10"
 # public/manim/ travel with the deck, so deploy environments don't
 # need cairo/pango/native build tools.
 # To render scenes locally, switch to `presentation-sanity[manim]`.
+# Pin a release tag (https://github.com/yakaboskic/presentation-sanity/releases),
+# not @main; to upgrade, change the tag and run `uv lock`.
 dependencies = [
-    "presentation-sanity @ git+https://github.com/yakaboskic/presentation-sanity.git@main",
+    "presentation-sanity @ git+https://github.com/yakaboskic/presentation-sanity.git@v0.3.0",
 ]
 
 [build-system]
@@ -467,6 +469,24 @@ alongside this repo and point its dependency at the local checkout:
 [tool.uv.sources]
 presentation-sanity = { path = "../presentation-sanity", editable = true }
 ```
+
+### Releasing
+
+Subject repos and the template pin release tags, so a change reaches them
+only through a release:
+
+1. Bump `version` in `pyproject.toml` and `__version__` in
+   `src/presentation_sanity/__init__.py`, update the tag in the dependency
+   snippet above, run `uv run pytest`, and push to `main`.
+2. Tag and publish:
+   ```bash
+   git tag -a vX.Y.Z -m "vX.Y.Z — summary" && git push origin vX.Y.Z
+   gh release create vX.Y.Z --verify-tag --title "vX.Y.Z — summary" --notes-file notes.md
+   ```
+3. Move the template to it: in `presentation-sanity-template`, change the tag in
+   `pyproject.toml` (the dependency line and the `[manim]` comment), the README
+   and its "Upgrading presentation-sanity" example; run `uv lock`, build the
+   example presentation, and push.
 
 ## Subject layout
 
