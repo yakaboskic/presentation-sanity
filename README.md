@@ -14,17 +14,24 @@ markdown-it + Shiki), so one `components/` directory, one manifest and one
 YAML as the same tag in `slides.md`, and a manim scene renders once and embeds
 twice.
 
+One level up, a repo can be a **project**: many presentations — and versions of
+them — sharing that same manifest, `public/` and components, each in its own
+folder under `presentations/` (see [Projects](#projects-many-presentations-one-repo)).
+A new version of a talk is a folder, not a branch or a copied repo.
+
 ## What it does
 
-Verbs take an optional **target** — a key under `outputs:` in the manifest.
+Verbs take an optional **target** — a key under `outputs:` in the manifest, or
+in a project `PRESENTATION[:OUTPUT]` (e.g. `kickoff/v2:blog`).
 
 | Command | What runs | When to use |
 |---|---|---|
+| `presentation-sanity list` | List the presentations (in a project) or outputs (`outputs` is an alias) | Check what exists and what's built. |
+| `presentation-sanity new kickoff/v2 --from kickoff/v1` | Copy a presentation into a new folder and record the lineage | Start a new version (project only). |
 | `presentation-sanity build` | Validate manifest → export stale figures → render stale manim scenes → render **every** output | Build everything. |
 | `presentation-sanity build blog` | Same, but only the named output(s) | Build one printout. |
 | `presentation-sanity dev blog` | `vitepress dev` with hot reload | Write the post. |
 | `presentation-sanity dev slides` | `slidev` with hot reload | Iterate on slide content. |
-| `presentation-sanity outputs` | List the outputs this subject declares | Check what exists and what's built. |
 | `presentation-sanity scaffold` | Regenerate `.vitepress/` from the manifest, without building | Editor tooling / inspecting the generated config. |
 | `presentation-sanity build-manim` | Render only stale manim scenes | You edited a `.py` scene file. |
 | `presentation-sanity build-figures` | Export only stale Excalidraw figures | You edited an `.excalidraw` source. |
@@ -46,6 +53,81 @@ The exporter is **optional** — `build` auto-skips figure export when it isn't
 installed and uses the committed images in `public/figures/`, so deploys never
 need a headless browser. Reference a figure from either output with
 `<FigureImage figure="<key>" />`.
+
+## Projects: many presentations, one repo
+
+A repo whose root holds `manifest.yaml` **and a `presentations/` directory** is a
+project. Every folder under `presentations/` that contains an output's entry
+document (`slides.md`, `blog.md`) is a presentation, and its path is its id.
+Folders without one just group presentations — that is all a version is:
+
+```
+pigean/
+├── manifest.yaml                 # SHARED: variables, scenes, figures, bibliography, math,
+│                                 #   plus defaults for every presentation's outputs
+├── public/  scenes/  refs.bib    # shared assets and sources
+├── shared/                       # shared Vue layer, a local Slidev addon (below)
+└── presentations/
+    ├── decode-pigean/            # grouping folder
+    │   ├── cfde-2026/slides.md   #   id decode-pigean/cfde-2026
+    │   └── eurac-2026/           #   id decode-pigean/eurac-2026
+    │       ├── slides.md
+    │       ├── manifest.yaml     #   optional: metadata + output overrides
+    │       └── components/X.vue  #   optional: overrides shared/components/X.vue
+    └── ashg-2026/slides.md
+```
+
+- **Outputs** come from the files a presentation has: `slides` for `slides.md`,
+  `blog` for `blog.md`. The project's `outputs:` are defaults for all of them
+  (`out:` is not allowed there); each builds to `site/<id>/<output>/`, and
+  `site/index.html` — refreshed on every build — lists them grouped by folder.
+- **A presentation's `manifest.yaml`** may only hold `metadata` (title, date,
+  venue, authors, `from`) and `outputs` overrides (deep-merged; `blog: false`
+  opts out). Variables, scenes, figures, bibliography and math are project-wide,
+  so they never fork: when a number changes, add a new key and point the new
+  version at it.
+- **Targets**: `build` with no target builds everything (or, inside a
+  presentation's folder, that presentation). A grouping folder selects every
+  presentation in it (`build decode-pigean`), and paths work too.
+- **`new <id> [--from <id>] [--title T]`** creates a presentation, or copies one
+  (skipping `exports/` and Slidev's scratch state), retitles its headmatter and
+  records `from:` in its manifest.
+- **`--base`** is the deploy prefix for all of `site/`: decks build with a
+  relative `./`, blogs with `<prefix><id>/<output>/`.
+- A repo **without** `presentations/` is a single subject and builds exactly as
+  before.
+
+### The shared layer is a Slidev addon
+
+Slidev takes components, layouts, global layers, styles and `vite.config.ts`
+from the folder of the deck it builds, so a deck at `presentations/<id>/` sees
+nothing at the project root. The shared files therefore live in `shared/`,
+packaged as a local addon and enabled once for every deck:
+
+```jsonc
+// package.json
+"devDependencies": { "psanity-shared": "file:./shared" },
+"slidev": { "addons": ["psanity-shared"] }
+```
+
+`shared/package.json` (just a `name`) is required. `shared/vite.config.ts` sets an
+**absolute** `publicDir` (the project's `public/` — a relative one would resolve
+against the deck's folder), registers the YAML plugin, defines `@project` /
+`@shared` aliases for depth-independent imports, and sets
+`slidev.components.allowOverrides` so a presentation's `components/X.vue` wins
+over the shared one. A package name is used rather than a relative path because
+Slidev resolves relative addon paths against the deck's *parent* folder.
+
+For blogs, the generated VitePress config does the equivalent: `srcDir` stays the
+project root (VitePress copies `<srcDir>/public` verbatim), the site is narrowed
+to one presentation with `srcExclude` + `rewrites`, the same two aliases are
+defined, and the theme registers `shared/components` then the presentation's
+own `components`. Each blog's config is written to
+`.cache/vitepress/<id>/.vitepress/`, so two blogs can run `dev` at once.
+
+`build`/`dev` stop early with "run `npm install`" when the addon isn't linked
+into `node_modules`, and warn when a project still has `components/` or
+`layouts/` at its root, where decks can't see them.
 
 ## Outputs
 
@@ -78,8 +160,9 @@ sites. Every other output's `entry` lands in `srcExclude` automatically, so
 ### The generated `.vitepress/`
 
 `presentation-sanity` writes `.vitepress/config.mts` and
-`.vitepress/theme/index.ts` from the manifest before every `dev`/`build`. The
-directory is generated, gitignored, and never hand-edited. The theme:
+`.vitepress/theme/index.ts` from the manifest before every `dev`/`build` (in a
+project, under `.cache/vitepress/<id>/`). The directory is generated,
+gitignored, and never hand-edited. The theme:
 
 - glob-registers every `components/*.vue` globally under its filename — the
   same convention Slidev uses, so components work in markdown with no imports;
@@ -356,6 +439,14 @@ presentation-sanity build blog   --base /talks/2026/    # absolute (VitePress)
 Or set `base:` per output in the manifest. `<ManimFigure>`, `<FigureImage>` and
 the Slidev `manim` layout all read `import.meta.env.BASE_URL`, so asset URLs
 follow whichever base is in force — no extra config needed.
+
+In a **project**, `--base` names the prefix the whole `site/` is served from,
+and each output's base is derived from it: decks get `./`, blogs get
+`<prefix><id>/<output>/`.
+
+```bash
+presentation-sanity build --base /pigean/    # blog of kickoff/v2 → /pigean/kickoff/v2/blog/
+```
 
 ## Install the tool directly
 

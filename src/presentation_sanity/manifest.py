@@ -6,6 +6,11 @@ scenes, excalidraw figures) and one or more **outputs**: different printouts
 of the same material. Today that's a Slidev deck and a VitePress blog; the
 `outputs:` map is open-ended so a third renderer is a new entry, not a new
 schema section.
+
+A repo with a `presentations/` directory is a *project*: the root manifest
+holds the shared inputs, and every folder under `presentations/` with an entry
+document is its own subject whose outputs default to the root `outputs:` (see
+project.py). Without that directory the repo is a single subject, as before.
 """
 
 from __future__ import annotations
@@ -33,6 +38,34 @@ DEFAULT_ENTRY_BY_ENGINE = {
     "slidev": "slides.md",
     "vitepress": "blog.md",
 }
+
+# A repo with this directory next to manifest.yaml is a *project*: many
+# presentations sharing one manifest, one public/ and one shared/ Vue layer.
+PRESENTATIONS_DIR = "presentations"
+
+# Outputs every presentation in a project can have without declaring them. A
+# presentation builds the ones whose entry file exists in its folder; the
+# project manifest's `outputs:` configures (or adds to) these defaults.
+BUILTIN_PROJECT_OUTPUTS: dict[str, dict[str, Any]] = {
+    "slides": {"engine": "slidev", "entry": "slides.md"},
+    "blog": {"engine": "vitepress", "entry": "blog.md"},
+}
+
+# Shared inputs belong to the project; a presentation's manifest.yaml may only
+# describe itself and tune its outputs.
+PRESENTATION_KEYS = ("metadata", "outputs")
+PROJECT_ONLY_KEYS = ("variables", "scenes", "figures", "bibliography", "math")
+
+
+def deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    """Recursively merge two mappings; `override` wins, lists are replaced."""
+    out = dict(base)
+    for key, value in override.items():
+        if isinstance(value, dict) and isinstance(out.get(key), dict):
+            out[key] = deep_merge(out[key], value)
+        else:
+            out[key] = value
+    return out
 
 
 @dataclass
@@ -343,6 +376,10 @@ class Manifest:
     bibliography: BibliographyConfig = field(
         default_factory=lambda: BibliographyConfig()
     )
+    # Project mode: `outputs` is empty and the raw per-output defaults that
+    # every presentation merges its own `outputs:` over live here instead.
+    project_mode: bool = False
+    output_defaults: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     @property
     def title(self) -> str:
@@ -423,32 +460,30 @@ def load_manifest(root: Path) -> Manifest:
             )
 
     outputs_raw = raw.get("outputs")
-    if outputs_raw is None:
-        outputs = _default_outputs(root)
+    if outputs_raw is not None and not isinstance(outputs_raw, dict):
+        raise ManifestError("`outputs:` must be a mapping of name → config")
+
+    project_mode = (root / PRESENTATIONS_DIR).is_dir()
+    outputs: dict[str, Output] = {}
+    output_defaults: dict[str, dict[str, Any]] = {}
+
+    if project_mode:
+        output_defaults = _project_output_defaults(outputs_raw or {})
     else:
-        if not isinstance(outputs_raw, dict):
-            raise ManifestError("`outputs:` must be a mapping of name → config")
-        outputs = {
-            key: Output.from_raw(key, val) for key, val in outputs_raw.items()
-        }
+        if outputs_raw is None:
+            outputs = _default_outputs(root)
+        else:
+            outputs = {
+                key: Output.from_raw(key, val) for key, val in outputs_raw.items()
+            }
 
-    for output in outputs.values():
-        if not (root / output.entry).is_file():
-            print(
-                f"  warning: output {output.key!r} entry {output.entry} not found",
-                file=sys.stderr,
-            )
-
-    # One VitePress site per subject: multiple markdown pages belong to the
-    # *same* site (add them next to the entry), not to a second one. Two
-    # vitepress outputs would fight over the single `.vitepress/` root.
-    vp = [k for k, o in outputs.items() if o.engine == "vitepress"]
-    if len(vp) > 1:
-        raise ManifestError(
-            f"only one `vitepress` output is supported per subject, found: "
-            f"{', '.join(vp)}. Additional markdown files alongside the entry "
-            "become extra pages of the same site."
-        )
+        for output in outputs.values():
+            if not (root / output.entry).is_file():
+                print(
+                    f"  warning: output {output.key!r} entry {output.entry} not found",
+                    file=sys.stderr,
+                )
+        check_single_vitepress(outputs, "subject")
 
     return Manifest(
         root=root,
@@ -459,4 +494,88 @@ def load_manifest(root: Path) -> Manifest:
         outputs=outputs,
         math=MathConfig.from_raw(raw.get("math")),
         bibliography=BibliographyConfig.from_raw(raw.get("bibliography")),
+        project_mode=project_mode,
+        output_defaults=output_defaults,
     )
+
+
+def check_single_vitepress(outputs: dict[str, Output], owner: str) -> None:
+    """One VitePress site per subject (or per presentation).
+
+    Multiple markdown pages belong to the *same* site (add them next to the
+    entry), not to a second one — two vitepress outputs would fight over one
+    generated config root.
+    """
+    vp = [k for k, o in outputs.items() if o.engine == "vitepress"]
+    if len(vp) > 1:
+        raise ManifestError(
+            f"only one `vitepress` output is supported per {owner}, found: "
+            f"{', '.join(vp)}. Additional markdown files alongside the entry "
+            "become extra pages of the same site."
+        )
+
+
+def _project_output_defaults(outputs_raw: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Merge a project manifest's `outputs:` over the built-in defaults.
+
+    Each value is kept raw so a presentation can deep-merge its own overrides
+    before the `Output` is built. `false` drops a built-in output project-wide.
+    `out:` is rejected: every presentation would write to the same directory.
+    """
+    defaults = {k: dict(v) for k, v in BUILTIN_PROJECT_OUTPUTS.items()}
+    for key, val in outputs_raw.items():
+        if val is False:
+            defaults.pop(key, None)
+            continue
+        val = val or {}
+        if not isinstance(val, dict):
+            raise ManifestError(
+                f"output {key!r}: expected a mapping, got {type(val).__name__}"
+            )
+        if "out" in val:
+            raise ManifestError(
+                f"output {key!r}: `out:` can't be set in a project manifest — every "
+                f"presentation builds to site/<presentation>/{key}. Set `out:` in a "
+                "presentation's own manifest.yaml to move just that one."
+            )
+        defaults[key] = deep_merge(defaults.get(key, {}), val)
+    for key, val in defaults.items():
+        Output.from_raw(key, val)  # validate engine/entry now, not per deck
+    return defaults
+
+
+def load_presentation_overrides(pres_dir: Path) -> dict[str, Any]:
+    """Read a presentation's optional manifest.yaml → {metadata, outputs}.
+
+    A presentation describes itself (`metadata`) and tunes its outputs
+    (`outputs`); variables, scenes, figures, bibliography and math are shared
+    project inputs and must be declared in the project manifest.
+    """
+    path = pres_dir / "manifest.yaml"
+    if not path.is_file():
+        return {"metadata": {}, "outputs": {}}
+    raw = yaml.safe_load(path.read_text()) or {}
+    if not isinstance(raw, dict):
+        raise ManifestError(f"{path}: expected a mapping at the top level")
+
+    misplaced = [k for k in PROJECT_ONLY_KEYS if k in raw]
+    if misplaced:
+        raise ManifestError(
+            f"{path}: {', '.join(misplaced)} belong in the project manifest.yaml — "
+            "they are shared by every presentation. A presentation's manifest may "
+            "only set `metadata` and `outputs`."
+        )
+    unknown = [k for k in raw if k not in PRESENTATION_KEYS]
+    if unknown:
+        print(
+            f"  warning: {path}: ignoring unknown key(s) {', '.join(unknown)}",
+            file=sys.stderr,
+        )
+
+    metadata = raw.get("metadata") or {}
+    outputs = raw.get("outputs") or {}
+    if not isinstance(metadata, dict):
+        raise ManifestError(f"{path}: `metadata:` must be a mapping")
+    if not isinstance(outputs, dict):
+        raise ManifestError(f"{path}: `outputs:` must be a mapping of name → config")
+    return {"metadata": metadata, "outputs": outputs}

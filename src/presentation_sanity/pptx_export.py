@@ -25,90 +25,14 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-import yaml
-
 from .manifest import Manifest
 from .manim_render import ffmpeg_path, poster_path_for
+from .markdown_meta import parse_slide_frontmatters
 
 # 16:9 slide, in EMU (English Metric Units; 914400 per inch).
 _EMU_PER_INCH = 914400
 _SLIDE_W = int(13.333 * _EMU_PER_INCH)
 _SLIDE_H = int(7.5 * _EMU_PER_INCH)
-
-
-# ── slide parsing (mirrors @slidev/parser parseSync + the hide/disabled filter)
-
-def _split_slides(markdown: str) -> list[str]:
-    """Split deck markdown into per-slide raw blocks, matching Slidev's parser.
-
-    Separators are lines beginning with `---`; a `---` immediately followed by a
-    non-blank line opens a frontmatter block that runs to the next `---` (so the
-    fences inside frontmatter aren't mistaken for separators). Fenced code blocks
-    are skipped so a `---` inside ``` doesn't split a slide.
-    """
-    lines = markdown.replace("\r\n", "\n").split("\n")
-    n = len(lines)
-    slides: list[str] = []
-    start = 0
-
-    def emit(end: int) -> None:
-        nonlocal start
-        if start != end:
-            slides.append("\n".join(lines[start:end]))
-        start = end + 1
-
-    i = 0
-    while i < n:
-        line = lines[i].rstrip()
-        if line.startswith("---"):
-            emit(i)
-            nxt = lines[i + 1] if i + 1 < n else None
-            # `---` (not `----`) followed by content → frontmatter block
-            if (len(line) <= 3 or line[3] != "-") and (nxt is not None and nxt.strip()):
-                start = i
-                i += 1
-                while i < n and lines[i].rstrip() != "---":
-                    i += 1
-        elif line.lstrip().startswith("```"):
-            fence = re.match(r"^\s*`+", line).group(0)
-            j = i + 1
-            while j < n and not lines[j].startswith(fence.lstrip()):
-                j += 1
-            if j != n:
-                i = j
-        i += 1
-    if start <= n - 1:
-        emit(n)
-    return slides
-
-
-def _frontmatter(raw: str) -> dict[str, Any]:
-    """Parse a slide block's leading YAML frontmatter (`---\\n…\\n---`)."""
-    if not raw.lstrip().startswith("---"):
-        return {}
-    m = re.match(r"^\s*---\n(.*?)\n---", raw, re.S)
-    if not m:
-        return {}
-    try:
-        data = yaml.safe_load(m.group(1))
-        return data if isinstance(data, dict) else {}
-    except yaml.YAMLError:
-        return {}
-
-
-def parse_slide_frontmatters(markdown: str) -> list[dict[str, Any]]:
-    """Frontmatter dicts for every *rendered* slide, in order.
-
-    Slides with `hide:`/`disabled:` truthy are dropped — Slidev excludes them, so
-    this keeps our indices aligned with the PNG export's 1..N numbering.
-    """
-    out: list[dict[str, Any]] = []
-    for raw in _split_slides(markdown):
-        fm = _frontmatter(raw)
-        if fm.get("hide") or fm.get("disabled"):
-            continue
-        out.append(fm)
-    return out
 
 
 # ── ffmpeg: webm → mp4 (H.264) ──────────────────────────────────────────────
@@ -144,7 +68,12 @@ def _ensure_mp4(webm: Path, mp4: Path, *, verbose: bool = False) -> bool:
 # ── slidev PNG export (one image per slide, final click state) ───────────────
 
 def _export_pngs(
-    root: Path, out_dir: Path, *, with_clicks: bool = True, verbose: bool = False
+    root: Path,
+    out_dir: Path,
+    *,
+    entry: str = "slides.md",
+    with_clicks: bool = True,
+    verbose: bool = False,
 ) -> list[dict[str, Any]]:
     """Run `slidev export --format png` into `out_dir`; return ordered steps.
 
@@ -157,7 +86,9 @@ def _export_pngs(
     if shutil.which("npx") is None:
         raise RuntimeError("npx not found on PATH. Install Node.js >= 20.")
     out_dir.mkdir(parents=True, exist_ok=True)
-    cmd = ["npx", "slidev", "export", "--format", "png", "--output", str(out_dir)]
+    # Name the entry: without it Slidev exports `slides.md` in the cwd, which
+    # is the wrong deck (or none) for a non-default entry or a project.
+    cmd = ["npx", "slidev", "export", entry, "--format", "png", "--output", str(out_dir)]
     if with_clicks:
         cmd.append("--with-clicks")
     if verbose:
@@ -266,6 +197,8 @@ def export_pptx(
     *,
     entry: str = "slides.md",
     out: str | None = None,
+    title: str | None = None,
+    exports_dir: Path | None = None,
     autoplay: bool = True,
     with_clicks: bool = True,
     verbose: bool = False,
@@ -274,6 +207,9 @@ def export_pptx(
 
     `entry` is the Slidev markdown to read, i.e. the `entry:` of the manifest's
     slidev output. Defaults to `slides.md` for manifests predating `outputs:`.
+    `root` is where node_modules and `public/manim/` live — the project root
+    for a presentation. `title` names the file, and `exports_dir` is where it
+    goes by default (`<root>/exports/`).
     """
     try:
         import pptx  # noqa: F401
@@ -327,7 +263,9 @@ def export_pptx(
         png_dir = Path(tmp) / "png"
         mode = "with click steps" if with_clicks else "final state only"
         print(f"  rendering slide PNGs ({mode})...")
-        steps = _export_pngs(root, png_dir, with_clicks=with_clicks, verbose=verbose)
+        steps = _export_pngs(
+            root, png_dir, entry=entry, with_clicks=with_clicks, verbose=verbose
+        )
         rendered_slides = {s["slide"] for s in steps}
         if rendered_slides and max(rendered_slides) != n_slides:
             print(
@@ -335,9 +273,11 @@ def export_pptx(
                 f"{max(rendered_slides)} — using the rendered numbering."
             )
 
-        deck_name = (manifest.metadata.get("title") if manifest else None) or root.name
+        deck_name = (
+            title or (manifest.metadata.get("title") if manifest else None) or root.name
+        )
         safe = re.sub(r"[^A-Za-z0-9._-]+", "-", str(deck_name)).strip("-") or "deck"
-        out_path = Path(out) if out else (root / "exports" / f"{safe}.pptx")
+        out_path = Path(out) if out else ((exports_dir or root / "exports") / f"{safe}.pptx")
 
         print(f"  assembling {out_path.name} ({len(steps)} steps) ...")
         n_out = build_pptx(

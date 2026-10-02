@@ -269,5 +269,9 @@ export default defineConfig({
     // manifest. This config is self-contained; the deck's is left to the deck.
     configFile: false,
     plugins: [__VITE_PLUGINS__],
+    // In a project: `@project` → the project root, `@shared` → its shared/ Vue
+    // layer — the same aliases the deck's shared/vite.config.ts defines, so a
+    // component imports `@project/manifest.yaml` identically in both engines.
+    resolve: { alias: __ALIASES__ },
   },
 })
