@@ -120,6 +120,9 @@ class Scene:
     class_name: str
     quality: str = "h"
     format: str = "webm"
+    # Cut into click-by-click segments (manim-slides `next_slide()` checkpoints)
+    # under public/manim/<key>/, in addition to the full video.
+    steps: bool = False
 
     @classmethod
     def from_raw(cls, key: str, raw: dict[str, Any], root: Path) -> "Scene":
@@ -133,6 +136,7 @@ class Scene:
             class_name=raw["class"],
             quality=raw.get("quality", "h"),
             format=raw.get("format", "webm"),
+            steps=bool(raw.get("steps", False)),
         )
 
 

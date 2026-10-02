@@ -100,6 +100,8 @@ def _scene_hash(scene: Scene) -> str:
         "quality": scene.quality,
         "format": scene.format,
     }
+    if scene.steps:  # only when set, so existing cache entries stay valid
+        config["steps"] = True
     h.update(json.dumps(config, sort_keys=True).encode())
     return h.hexdigest()[:16]
 
@@ -144,6 +146,9 @@ def _render_one(scene: Scene, output_path: Path, *, verbose: bool = False) -> No
 
         proc = subprocess.run(
             cmd,
+            # manim-slides writes its checkpoint index to ./slides/, relative
+            # to the cwd — keep it in the temp dir with everything else.
+            cwd=tmp_dir,
             stdout=None if verbose else subprocess.DEVNULL,
             stderr=subprocess.PIPE,
             text=True,
@@ -176,6 +181,90 @@ def _render_one(scene: Scene, output_path: Path, *, verbose: bool = False) -> No
             produced = candidates[-1]
 
         shutil.move(str(produced), str(output_path))
+
+        if scene.steps:
+            _collect_segments(scene, tmp_dir, segments_dir_for(output_path), verbose=verbose)
+
+
+def segments_dir_for(video_path: Path) -> Path:
+    """`public/manim/<key>.<fmt>` → `public/manim/<key>/` for a stepped scene."""
+    return video_path.with_suffix("")
+
+
+def _extract_last_frame(video: Path, image: Path, *, verbose: bool = False) -> bool:
+    """The true final frame of `video` (decode the tail, keep the last image).
+
+    Unlike `_extract_poster` (one frame a second before the end), this is the
+    exact state a segment stops on — what the deck shows when you step back to
+    that checkpoint, and what a click-by-click PDF prints.
+    """
+    ff = ffmpeg_path()
+    if ff is None:
+        return False
+    cmd = [ff, "-y", "-sseof", "-0.5", "-i", str(video), "-update", "1", "-q:v", "2", str(image)]
+    if verbose:
+        print(f"  $ {' '.join(cmd)}", file=sys.stderr)
+    proc = subprocess.run(
+        cmd,
+        stdout=subprocess.DEVNULL,
+        stderr=None if verbose else subprocess.DEVNULL,
+        check=False,
+    )
+    return proc.returncode == 0 and image.is_file()
+
+
+def _collect_segments(scene: Scene, tmp_dir: Path, dest: Path, *, verbose: bool = False) -> None:
+    """Copy manim-slides' segments into `dest` with a `segments.json` index.
+
+    manim-slides (a `Slide` subclass, checkpoints via `self.next_slide()`)
+    writes `slides/<Class>.json` plus one video per segment, paths relative to
+    the directory holding `slides/`. The index the deck reads is normalized to
+    file names inside `dest`: `00.webm`, `01.webm`, … with last-frame posters.
+    """
+    index_path = tmp_dir / "slides" / f"{scene.class_name}.json"
+    if not index_path.is_file():
+        raise RuntimeError(
+            f"scene {scene.key!r} has `steps: true` but rendering wrote no "
+            f"slides/{scene.class_name}.json — subclass manim_slides.Slide and mark "
+            "checkpoints with self.next_slide() (pip install manim-slides)"
+        )
+    data = json.loads(index_path.read_text())
+    if dest.exists():
+        shutil.rmtree(dest)
+    dest.mkdir(parents=True)
+
+    segments: list[dict[str, Any]] = []
+    for i, slide in enumerate(data.get("slides") or []):
+        src = tmp_dir / slide["file"]
+        name = f"{i:02d}{src.suffix}"
+        shutil.copy2(src, dest / name)
+        segment: dict[str, Any] = {
+            "file": name,
+            "loop": bool(slide.get("loop")),
+            "auto_next": bool(slide.get("auto_next")),
+            "notes": slide.get("notes") or "",
+        }
+        if slide.get("type") == "image":
+            segment["poster"] = name
+        else:
+            poster = dest / f"{i:02d}.poster.png"
+            if _extract_last_frame(dest / name, poster, verbose=verbose):
+                segment["poster"] = poster.name
+        segments.append(segment)
+
+    (dest / "segments.json").write_text(
+        json.dumps(
+            {
+                "scene": scene.key,
+                "resolution": data.get("resolution"),
+                "background": data.get("background_color"),
+                "segments": segments,
+            },
+            indent=2,
+        )
+        + "\n"
+    )
+    print(f"  {scene.key}: {len(segments)} segments")
 
 
 def render_scenes(
@@ -211,6 +300,7 @@ def render_scenes(
             not force
             and out_file.is_file()
             and cached.get("hash") == current_hash
+            and (not scene.steps or (segments_dir_for(out_file) / "segments.json").is_file())
         )
 
         if is_fresh:

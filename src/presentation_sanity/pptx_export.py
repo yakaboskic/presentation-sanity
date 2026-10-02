@@ -17,6 +17,7 @@ Requirements: Node + Slidev (for the PNG export), ffmpeg (webm→mp4), and
 
 from __future__ import annotations
 
+import json
 import re
 import shutil
 import subprocess
@@ -131,6 +132,20 @@ def _set_autoplay(slide) -> None:  # type: ignore[no-untyped-def]
             cond.set("delay", "0")
 
 
+def _set_loop(slide) -> None:  # type: ignore[no-untyped-def]
+    """Repeat the embedded movie until the slide is left (a `loop` segment)."""
+    from pptx.oxml.ns import qn
+
+    timing = slide._element.find(qn("p:timing"))
+    if timing is None:
+        return
+    for video in timing.iter(qn("p:video")):
+        for node in video.iter(qn("p:cMediaNode")):
+            ctn = node.find(qn("p:cTn"))
+            if ctn is not None:
+                ctn.set("repeatCount", "indefinite")
+
+
 def build_pptx(
     *,
     steps: list[dict[str, Any]],
@@ -139,9 +154,13 @@ def build_pptx(
     poster_for: dict[str, Path],
     out_path: Path,
     autoplay: bool = True,
+    stepped_slides: dict[int, str] | None = None,
+    segments_for: dict[str, list[dict[str, Any]]] | None = None,
 ) -> int:
     """Assemble the PPTX. One slide per click step; manim slides embed the video
-    once (extra steps of a manim slide, if any, are skipped). Returns slide count."""
+    once (extra steps of a manim slide, if any, are skipped). A stepped manim
+    slide (`layout: manim-steps`) embeds segment k at click step k, so each
+    click in PowerPoint plays the next part of the scene. Returns slide count."""
     from pptx import Presentation
     from pptx.dml.color import RGBColor
     from pptx.util import Emu
@@ -151,10 +170,34 @@ def build_pptx(
     prs.slide_height = Emu(_SLIDE_H)
     blank = prs.slide_layouts[6]  # fully blank layout
 
+    stepped_slides = stepped_slides or {}
+    segments_for = segments_for or {}
     embedded: set[int] = set()
     count = 0
     for st in steps:
         no = st["slide"]
+        stepped = segments_for.get(stepped_slides.get(no, ""))
+        if stepped:
+            segment = stepped[min(st["step"], len(stepped)) - 1]
+            if segment.get("mp4") and Path(segment["mp4"]).is_file():
+                slide = prs.slides.add_slide(blank)
+                count += 1
+                bg = slide.background
+                bg.fill.solid()
+                bg.fill.fore_color.rgb = RGBColor(0, 0, 0)
+                poster = segment.get("poster")
+                slide.shapes.add_movie(
+                    str(segment["mp4"]),
+                    Emu(0), Emu(0), Emu(_SLIDE_W), Emu(_SLIDE_H),
+                    poster_frame_image=str(poster) if poster and Path(poster).is_file() else None,
+                    mime_type="video/mp4",
+                )
+                if autoplay:
+                    _set_autoplay(slide)
+                if segment.get("loop"):
+                    _set_loop(slide)
+                continue
+
         scene = manim_slides.get(no)
         mp4 = mp4_for.get(scene) if scene else None
 
@@ -232,7 +275,15 @@ def export_pptx(
     for idx, fm in enumerate(frontmatters, start=1):
         if fm.get("layout") == "manim" and fm.get("scene"):
             manim_slides[idx] = str(fm["scene"])
-    print(f"  parsed {n_slides} slides, {len(manim_slides)} manim")
+    stepped_slides: dict[int, str] = {
+        idx: str(fm["scene"])
+        for idx, fm in enumerate(frontmatters, start=1)
+        if fm.get("layout") == "manim-steps" and fm.get("scene")
+    }
+    print(
+        f"  parsed {n_slides} slides, {len(manim_slides)} manim, "
+        f"{len(stepped_slides)} stepped manim"
+    )
 
     # transcode the manim scenes we need → mp4 (+ collect posters)
     if manim_slides and ffmpeg_path() is None:
@@ -257,6 +308,28 @@ def export_pptx(
         poster = poster_path_for(webm)
         if poster.is_file():
             poster_for[scene_key] = poster
+
+    # stepped scenes: one mp4 per segment, from public/manim/<scene>/segments.json
+    segments_for: dict[str, list[dict[str, Any]]] = {}
+    for scene_key in sorted(set(stepped_slides.values())):
+        seg_dir = root / "public" / "manim" / scene_key
+        index_file = seg_dir / "segments.json"
+        if not index_file.is_file():
+            print(f"  warning: no segments for stepped scene {scene_key!r} at {index_file}")
+            continue
+        segments = []
+        for i, seg in enumerate(json.loads(index_file.read_text()).get("segments") or []):
+            mp4 = mp4_dir / scene_key / f"{i:02d}.mp4"
+            ok = _ensure_mp4(seg_dir / seg["file"], mp4, verbose=verbose)
+            segments.append(
+                {
+                    "mp4": mp4 if ok else None,
+                    "poster": seg_dir / seg["poster"] if seg.get("poster") else None,
+                    "loop": bool(seg.get("loop")),
+                }
+            )
+        segments_for[scene_key] = segments
+        print(f"  {scene_key}: {sum(1 for s in segments if s['mp4'])} segment mp4(s)")
 
     # render PNGs — one per click step (so v-clicks become progressive slides)
     with tempfile.TemporaryDirectory(prefix="psanity-pptx-") as tmp:
@@ -287,6 +360,8 @@ def export_pptx(
             poster_for=poster_for,
             out_path=out_path,
             autoplay=autoplay,
+            stepped_slides=stepped_slides,
+            segments_for=segments_for,
         )
 
     print(f"  done → {out_path}")
