@@ -264,12 +264,17 @@ def build_pptx(
 def export_pptx(
     root: Path,
     *,
+    entry: str = "slides.md",
     out: str | None = None,
     autoplay: bool = True,
     with_clicks: bool = True,
     verbose: bool = False,
 ) -> Path:
-    """Build a video-embedding PPTX for the deck at `root`. Returns the output path."""
+    """Build a video-embedding PPTX for the deck at `root`. Returns the output path.
+
+    `entry` is the Slidev markdown to read, i.e. the `entry:` of the manifest's
+    slidev output. Defaults to `slides.md` for manifests predating `outputs:`.
+    """
     try:
         import pptx  # noqa: F401
     except ModuleNotFoundError as e:
@@ -278,9 +283,9 @@ def export_pptx(
             "  install with: pip install presentation-sanity[pptx]"
         ) from e
 
-    manifest_md = root / "slides.md"
+    manifest_md = root / entry
     if not manifest_md.is_file():
-        raise RuntimeError(f"slides.md not found at {manifest_md}")
+        raise RuntimeError(f"deck entry {entry!r} not found at {manifest_md}")
 
     manifest = _load_manifest_safe(root)
     frontmatters = parse_slide_frontmatters(manifest_md.read_text())

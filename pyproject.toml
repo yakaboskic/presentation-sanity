@@ -1,7 +1,7 @@
 [project]
 name = "presentation-sanity"
-version = "0.1.0"
-description = "Build interactive HTML, PDF, and PPTX presentations from a single manifest.yaml — with variable provenance and pre-rendered manim scenes."
+version = "0.2.0"
+description = "Build slides and blogs from a single manifest.yaml — shared variables, provenance, manim scenes and figures, rendered by Slidev and VitePress."
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}

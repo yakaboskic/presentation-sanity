@@ -1,4 +1,15 @@
-"""CLI entry point: argparse-based, matching document-sanity's style."""
+"""CLI entry point: argparse-based, matching document-sanity's style.
+
+Verbs take an optional output *target* — a key under `outputs:` in
+manifest.yaml:
+
+    presentation-sanity build              # every declared output
+    presentation-sanity build blog         # just the blog
+    presentation-sanity dev blog           # vitepress dev server
+    presentation-sanity dev slides         # slidev dev server
+    presentation-sanity preview blog
+    presentation-sanity export pdf         # slides only
+"""
 
 from __future__ import annotations
 
@@ -7,41 +18,82 @@ import sys
 from pathlib import Path
 
 from . import __version__
-from .slidev import DEFAULT_OUT
+from .manifest import Manifest, ManifestError, Output, load_manifest
+
+
+def _fail(e: Exception, verbose: bool) -> int:
+    if isinstance(e, ManifestError):
+        print(f"  manifest error: {e}", file=sys.stderr)
+        return 2
+    print(f"  error: {e}", file=sys.stderr)
+    if verbose:
+        import traceback
+
+        traceback.print_exc()
+    return 1
+
+
+def _pick_one(
+    manifest: Manifest, target: str | None, *, engine: str | None = None
+) -> Output:
+    """Resolve the single output a verb like `dev` or `preview` acts on.
+
+    With no target, pick the only candidate; if several qualify, list them
+    rather than guessing — silently developing the wrong printout is worse
+    than one extra keystroke.
+    """
+    pool = manifest.outputs
+    if engine is not None:
+        pool = manifest.outputs_for_engine(engine)
+        if not pool:
+            raise ManifestError(
+                f"manifest.yaml declares no `{engine}` output. Add one under "
+                f"`outputs:` with `engine: {engine}`."
+            )
+    if target is not None:
+        if target not in manifest.outputs:
+            raise ManifestError(
+                f"unknown output {target!r}. manifest.yaml declares: "
+                f"{', '.join(manifest.outputs) or '(none)'}"
+            )
+        output = manifest.outputs[target]
+        if engine is not None and output.engine != engine:
+            raise ManifestError(
+                f"output {target!r} uses engine {output.engine!r}, "
+                f"but this command needs {engine!r}"
+            )
+        return output
+    if len(pool) == 1:
+        return next(iter(pool.values()))
+    raise ManifestError(
+        f"several outputs to choose from ({', '.join(pool)}) — name one, "
+        f"e.g. `{', '.join(list(pool)[:1])}`"
+    )
 
 
 def cmd_build(args: argparse.Namespace) -> int:
     from .build import build_all
-    from .manifest import ManifestError
 
     try:
         build_all(
             Path(args.root).resolve(),
+            targets=args.targets or None,
             skip_manim=args.skip_manim,
             force_manim=args.force_manim,
             skip_figures=args.skip_figures,
             force_figures=args.force_figures,
-            skip_slidev=args.skip_slidev,
+            skip_render=args.skip_render,
             base=args.base,
             out=args.out,
             verbose=args.verbose,
         )
         return 0
-    except ManifestError as e:
-        print(f"  manifest error: {e}", file=sys.stderr)
-        return 2
     except Exception as e:
-        print(f"  error: {e}", file=sys.stderr)
-        if args.verbose:
-            import traceback
-
-            traceback.print_exc()
-        return 1
+        return _fail(e, args.verbose)
 
 
 def cmd_build_manim(args: argparse.Namespace) -> int:
     from . import manim_render
-    from .manifest import ManifestError, load_manifest
 
     if not manim_render.is_manim_available():
         print(
@@ -59,21 +111,12 @@ def cmd_build_manim(args: argparse.Namespace) -> int:
         for key, status in statuses.items():
             print(f"  {key}: {status}")
         return 0
-    except ManifestError as e:
-        print(f"  manifest error: {e}", file=sys.stderr)
-        return 2
     except Exception as e:
-        print(f"  error: {e}", file=sys.stderr)
-        if args.verbose:
-            import traceback
-
-            traceback.print_exc()
-        return 1
+        return _fail(e, args.verbose)
 
 
 def cmd_build_figures(args: argparse.Namespace) -> int:
     from . import figures_render
-    from .manifest import ManifestError, load_manifest
 
     try:
         manifest = load_manifest(Path(args.root).resolve())
@@ -86,46 +129,64 @@ def cmd_build_figures(args: argparse.Namespace) -> int:
         for key, status in statuses.items():
             print(f"  {key}: {status}")
         return 0
-    except ManifestError as e:
-        print(f"  manifest error: {e}", file=sys.stderr)
-        return 2
     except Exception as e:
-        print(f"  error: {e}", file=sys.stderr)
-        if args.verbose:
-            import traceback
-
-            traceback.print_exc()
-        return 1
+        return _fail(e, args.verbose)
 
 
 def cmd_dev(args: argparse.Namespace) -> int:
-    from . import slidev
+    from . import slidev, vitepress
 
     try:
-        slidev.dev(Path(args.root).resolve(), open_browser=not args.no_open)
+        manifest = load_manifest(Path(args.root).resolve())
+        output = _pick_one(manifest, args.target)
+        engine = vitepress if output.engine == "vitepress" else slidev
+        engine.dev(
+            manifest,
+            output,
+            open_browser=not args.no_open,
+            verbose=args.verbose,
+        )
         return 0
     except Exception as e:
-        print(f"  error: {e}", file=sys.stderr)
-        return 1
+        return _fail(e, args.verbose)
+
+
+def cmd_scaffold(args: argparse.Namespace) -> int:
+    """Write `.vitepress/` without building — useful for editor tooling."""
+    from . import vitepress
+
+    try:
+        manifest = load_manifest(Path(args.root).resolve())
+        output = _pick_one(manifest, args.target, engine="vitepress")
+        path = vitepress.scaffold(manifest, output, verbose=args.verbose)
+        print(f"  → {path}")
+        return 0
+    except Exception as e:
+        return _fail(e, args.verbose)
 
 
 def cmd_export(args: argparse.Namespace) -> int:
     from . import slidev
 
     try:
-        slidev.export(Path(args.root).resolve(), fmt=args.format, verbose=args.verbose)
+        manifest = load_manifest(Path(args.root).resolve())
+        output = _pick_one(manifest, args.target, engine="slidev")
+        slidev.export(manifest, output, fmt=args.format, verbose=args.verbose)
         return 0
     except Exception as e:
-        print(f"  error: {e}", file=sys.stderr)
-        return 1
+        return _fail(e, args.verbose)
 
 
 def cmd_export_pptx(args: argparse.Namespace) -> int:
     from . import pptx_export
 
     try:
+        root = Path(args.root).resolve()
+        manifest = load_manifest(root)
+        output = _pick_one(manifest, args.target, engine="slidev")
         pptx_export.export_pptx(
-            Path(args.root).resolve(),
+            root,
+            entry=output.entry,
             out=args.out,
             autoplay=not args.no_autoplay,
             with_clicks=not args.no_clicks,
@@ -133,31 +194,38 @@ def cmd_export_pptx(args: argparse.Namespace) -> int:
         )
         return 0
     except Exception as e:
-        print(f"  error: {e}", file=sys.stderr)
-        if args.verbose:
-            import traceback
-
-            traceback.print_exc()
-        return 1
+        return _fail(e, args.verbose)
 
 
 def cmd_preview(args: argparse.Namespace) -> int:
-    """Serve the build output over HTTP so you can preview it locally.
+    """Serve a built output over HTTP so you can preview it locally.
 
     Browsers refuse to load ES modules from file:// URLs, so opening
     <out>/index.html directly shows a blank page. This subcommand serves
     the output dir via Python's http.server — the same way a static bucket
-    will. Defaults to the same dir `build` writes to (DEFAULT_OUT).
+    will.
     """
     import functools
     import http.server
     import socketserver
     import webbrowser
 
-    out_dir = Path(args.root).resolve() / args.out
+    root = Path(args.root).resolve()
+    try:
+        manifest = load_manifest(root)
+        if args.out is not None:
+            out_dir = root / args.out
+            label = args.out
+        else:
+            output = _pick_one(manifest, args.target)
+            out_dir = root / output.out
+            label = output.out
+    except Exception as e:
+        return _fail(e, args.verbose)
+
     if not out_dir.is_dir():
         print(
-            f"  no {args.out}/ at {out_dir}. run `presentation-sanity build` first.",
+            f"  no {label}/ at {out_dir}. run `presentation-sanity build` first.",
             file=sys.stderr,
         )
         return 1
@@ -183,10 +251,28 @@ def cmd_preview(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_outputs(args: argparse.Namespace) -> int:
+    """List the printouts this subject declares."""
+    try:
+        manifest = load_manifest(Path(args.root).resolve())
+    except Exception as e:
+        return _fail(e, args.verbose)
+
+    if not manifest.outputs:
+        print("  no outputs declared under `outputs:` in manifest.yaml")
+        return 0
+    width = max(len(k) for k in manifest.outputs)
+    print(f"  {manifest.title}")
+    for key, o in manifest.outputs.items():
+        built = "built" if (manifest.root / o.out).is_dir() else "-"
+        print(f"    {key:<{width}}  {o.engine:<9} {o.entry:<14} → {o.out:<14} [{built}]")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="presentation-sanity",
-        description="Build presentations from a single manifest.yaml.",
+        description="Build slides and blogs from a single manifest.yaml.",
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -195,15 +281,27 @@ def build_parser() -> argparse.ArgumentParser:
     common_root.add_argument(
         "--root",
         default=".",
-        help="Deck root directory (containing manifest.yaml). Default: cwd",
+        help="Subject root directory (containing manifest.yaml). Default: cwd",
     )
     common_root.add_argument("-v", "--verbose", action="store_true")
 
     p_build = sub.add_parser(
-        "build", parents=[common_root], help="Full build: manim + slidev"
+        "build",
+        parents=[common_root],
+        help="Full build: figures + manim + every declared output",
+    )
+    p_build.add_argument(
+        "targets",
+        nargs="*",
+        metavar="TARGET",
+        help="Output key(s) from `outputs:`. Default: all of them.",
     )
     p_build.add_argument("--skip-manim", action="store_true")
-    p_build.add_argument("--skip-slidev", action="store_true")
+    p_build.add_argument(
+        "--skip-render",
+        action="store_true",
+        help="Render shared artifacts only; skip slidev/vitepress.",
+    )
     p_build.add_argument(
         "--force-manim", action="store_true", help="Re-render all scenes ignoring cache"
     )
@@ -217,19 +315,15 @@ def build_parser() -> argparse.ArgumentParser:
         "--base",
         default=None,
         help=(
-            "Forward to `slidev build --base <value>` so the built site can be "
-            "served from a subdirectory. Use './' for relative asset paths, or a "
-            "specific prefix like '/preview/abc/'."
+            "Serve the built site from a subdirectory. Slidev accepts './' for "
+            "fully relative paths; VitePress needs an absolute prefix like "
+            "'/blog/' (a relative value is coerced to '/')."
         ),
     )
     p_build.add_argument(
         "--out",
-        default=DEFAULT_OUT,
-        help=(
-            f"Output directory (forwarded to `slidev build --out`). Default "
-            f"{DEFAULT_OUT!r} — not 'dist'/'build'/'out', which many hosts and "
-            "tools auto-ignore."
-        ),
+        default=None,
+        help="Override the output directory. Requires exactly one TARGET.",
     )
     p_build.set_defaults(func=cmd_build)
 
@@ -251,18 +345,37 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_figures.set_defaults(func=cmd_build_figures)
 
-    p_dev = sub.add_parser("dev", parents=[common_root], help="slidev dev (hot reload)")
+    p_dev = sub.add_parser(
+        "dev",
+        parents=[common_root],
+        help="Hot-reload dev server for one output (slidev or vitepress)",
+    )
+    p_dev.add_argument("target", nargs="?", metavar="TARGET")
     p_dev.add_argument("--no-open", action="store_true")
     p_dev.set_defaults(func=cmd_dev)
 
+    p_scaffold = sub.add_parser(
+        "scaffold",
+        parents=[common_root],
+        help="Regenerate .vitepress/ from manifest.yaml without building",
+    )
+    p_scaffold.add_argument("target", nargs="?", metavar="TARGET")
+    p_scaffold.set_defaults(func=cmd_scaffold)
+
+    p_outputs = sub.add_parser(
+        "outputs", parents=[common_root], help="List the outputs this subject declares"
+    )
+    p_outputs.set_defaults(func=cmd_outputs)
+
     p_export = sub.add_parser(
-        "export", parents=[common_root], help="Export to PDF/PPTX/PNG/MD"
+        "export", parents=[common_root], help="Export slides to PDF/PPTX/PNG/MD"
     )
     p_export.add_argument(
         "format",
         choices=["pdf", "pptx", "png", "md"],
         help="Output format",
     )
+    p_export.add_argument("target", nargs="?", metavar="TARGET")
     p_export.set_defaults(func=cmd_export)
 
     p_export_pptx = sub.add_parser(
@@ -274,6 +387,7 @@ def build_parser() -> argparse.ArgumentParser:
             "python-pptx (pip install presentation-sanity[pptx])."
         ),
     )
+    p_export_pptx.add_argument("target", nargs="?", metavar="TARGET")
     p_export_pptx.add_argument(
         "--out",
         default=None,
@@ -297,13 +411,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_preview = sub.add_parser(
         "preview",
         parents=[common_root],
-        help="Serve the build output over HTTP for local preview (no Slidev dev server)",
+        help="Serve a built output over HTTP for local preview",
     )
+    p_preview.add_argument("target", nargs="?", metavar="TARGET")
     p_preview.add_argument("--port", type=int, default=8000)
     p_preview.add_argument(
         "--out",
-        default=DEFAULT_OUT,
-        help=f"Directory to serve (must match `build --out`). Default {DEFAULT_OUT!r}.",
+        default=None,
+        help="Serve this directory instead of the target's `out:`.",
     )
     p_preview.add_argument("--no-open", action="store_true")
     p_preview.set_defaults(func=cmd_preview)
