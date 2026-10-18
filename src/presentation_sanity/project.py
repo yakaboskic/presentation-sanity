@@ -39,7 +39,7 @@ from .manifest import (
     load_manifest,
     load_presentation_overrides,
 )
-from .markdown_meta import read_headmatter
+from .markdown_meta import read_headmatter, with_headmatter_title
 
 SITE_DIR = "site"
 
@@ -370,13 +370,19 @@ routerMode: hash
 """
 
 
-def _validate_new_id(project: Project, new_id: str) -> str:
+def normalize_presentation_id(new_id: str) -> str:
+    """`new_id` as a clean path under presentations/, or ManifestError."""
     new_id = new_id.strip().strip("/")
     if new_id.startswith(PRESENTATIONS_DIR + "/"):
         new_id = new_id[len(PRESENTATIONS_DIR) + 1:]
     parts = new_id.split("/")
     if not new_id or ":" in new_id or any(p in ("", ".", "..") for p in parts):
         raise ManifestError(f"invalid presentation id {new_id!r}")
+    return new_id
+
+
+def _validate_new_id(project: Project, new_id: str) -> str:
+    new_id = normalize_presentation_id(new_id)
     if new_id in project.presentations:
         raise ManifestError(f"presentation {new_id!r} already exists")
     for pid in project.presentations:
@@ -397,18 +403,7 @@ def _validate_new_id(project: Project, new_id: str) -> str:
 
 def _set_headmatter_title(path: Path, title: str) -> None:
     """Set `title:` in the first frontmatter block, keeping comments intact."""
-    text = path.read_text()
-    m = re.match(r"(\s*---\n)(.*?)(\n---)", text, re.S)
-    line = f"title: {json.dumps(title, ensure_ascii=False)}"
-    if m is None:
-        path.write_text(f"---\n{line}\n---\n\n{text}")
-        return
-    body = m.group(2)
-    if re.search(r"^title:.*$", body, re.M):
-        body = re.sub(r"^title:.*$", lambda _: line, body, count=1, flags=re.M)
-    else:
-        body = f"{line}\n{body}"
-    path.write_text(text[: m.start(2)] + body + text[m.end(2):])
+    path.write_text(with_headmatter_title(path.read_text(), title))
 
 
 def _record_lineage(pres_dir: Path, from_id: str, title: str | None) -> None:

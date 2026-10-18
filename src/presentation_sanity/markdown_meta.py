@@ -93,3 +93,22 @@ def read_headmatter(path: Path) -> dict[str, Any]:
         return {}
     slides = split_slides(path.read_text())
     return frontmatter(slides[0]) if slides else {}
+
+
+def with_headmatter_title(text: str, title: str) -> str:
+    """`text` with `title:` set in its first frontmatter block, comments kept.
+
+    Adds the key when the block lacks one, and a block when the file has none.
+    """
+    import json
+
+    m = re.match(r"(\s*---\n)(.*?)(\n---)", text, re.S)
+    line = f"title: {json.dumps(title, ensure_ascii=False)}"
+    if m is None:
+        return f"---\n{line}\n---\n\n{text}"
+    body = m.group(2)
+    if re.search(r"^title:.*$", body, re.M):
+        body = re.sub(r"^title:.*$", lambda _: line, body, count=1, flags=re.M)
+    else:
+        body = f"{line}\n{body}"
+    return text[: m.start(2)] + body + text[m.end(2):]
