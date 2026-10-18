@@ -1,0 +1,32 @@
+[project]
+name = "presentation-sanity-template"
+version = "0.1.0"
+description = "Starter project for presentation-sanity: many presentations sharing one manifest. Clone or use as a GitHub template."
+requires-python = ">=3.10"
+# presentation-sanity is pinned to a release tag, so every clone builds with
+# the same tool. To upgrade, change the tag below to a newer release
+# (https://github.com/yakaboskic/presentation-sanity/releases) and run `uv lock`.
+dependencies = [
+    "presentation-sanity @ git+https://github.com/yakaboskic/presentation-sanity.git@v0.3.0",
+]
+
+# manim, so `build` renders scenes/*.py into public/manim/ (the machine needs
+# ffmpeg, cairo, pango and LaTeX). It's a default group: `uv sync` installs
+# it, and `uv sync --no-default-groups` leaves it out — what the Pages
+# workflow and a co-author without those tools use; `build` then ships the
+# videos already committed in public/manim/.
+[dependency-groups]
+manim = ["presentation-sanity[manim]"]
+
+[tool.uv]
+default-groups = ["manim"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+bypass-selection = true   # the template has no importable Python

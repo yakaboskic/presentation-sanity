@@ -16,7 +16,14 @@ folder that presentation is the default:
     presentation-sanity new kickoff/v2 --from kickoff/v1  # fork a version
     presentation-sanity build                             # everything → site/
     presentation-sanity build kickoff                     # every version of a talk
+    presentation-sanity check                             # every reference resolves?
     presentation-sanity dev kickoff/v2:blog
+
+Starting and deploying a project:
+
+    presentation-sanity init my-talks --title "My talks" --first kickoff
+    presentation-sanity skills                # refresh the agent skill
+    presentation-sanity pages init            # GitHub Pages workflow
 """
 
 from __future__ import annotations
@@ -28,7 +35,7 @@ from pathlib import Path
 
 from . import __version__
 from .manifest import Manifest, ManifestError, Output, load_manifest
-from .project import Project, find_project_root, load_project, pick_one
+from .project import Presentation, Project, find_project_root, load_project, pick_one, select
 
 
 def _fail(e: Exception, verbose: bool) -> int:
@@ -397,6 +404,168 @@ def cmd_new(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_check(args: argparse.Namespace) -> int:
+    """Resolve every variable, scene, figure and citation the documents use."""
+    from . import check
+
+    try:
+        root, cwd, is_project = _locate(args)
+        if is_project:
+            project = load_project(root)
+            manifest = project.manifest
+            chosen: dict[str, Presentation] = {}
+            for presentation, _ in select(project, args.targets or None, cwd):
+                chosen.setdefault(presentation.id, presentation)
+            decks = {
+                Path(o.entry).resolve()
+                for p in chosen.values() for o in p.outputs.values() if o.engine == "slidev"
+            }
+            docs = [d for p in chosen.values() for d in check.presentation_documents(p.dir, decks)]
+            scope = f"{len(chosen)} presentation{'s' * (len(chosen) != 1)}"
+        else:
+            manifest = load_manifest(root)
+            outputs = manifest.resolve_targets(args.targets or None)
+            docs = [
+                (root / o.entry, o.engine == "slidev")
+                for o in outputs.values() if (root / o.entry).is_file()
+            ]
+            scope = manifest.title
+        report = check.check_documents(manifest, docs)
+    except Exception as e:
+        return _fail(e, args.verbose)
+
+    print(f"  checked {report.documents} document{'s' * (report.documents != 1)} in {scope}")
+    for mark, findings in (("✗", report.errors), ("!", report.warnings)):
+        for f in findings:
+            print(f"  {mark} {os.path.relpath(f.path, root)}:{f.line}  {f.message}")
+    if report.errors:
+        n, w = len(report.errors), len(report.warnings)
+        print(f"  {n} error{'s' * (n != 1)}, {w} warning{'s' * (w != 1)}")
+        return 1
+    print("  ok: every reference resolves" + (" (see warnings)" if report.warnings else ""))
+    return 0
+
+
+def _ask(prompt: str, default: str) -> str:
+    try:
+        answer = input(f"  {prompt} [{default}]: ").strip()
+    except EOFError:
+        answer = ""
+    return answer or default
+
+
+def cmd_init(args: argparse.Namespace) -> int:
+    """A new project from the template, in a folder with no .git."""
+    from . import init_project as ip
+
+    dest = Path(args.dir).expanduser()
+    given = {
+        "slug": args.name, "title": args.title, "author": args.author,
+        "email": args.email, "description": args.description,
+        "first": args.first, "deck_title": args.deck_title,
+    }
+    interactive = not args.yes and sys.stdin.isatty()
+    try:
+        source = None
+        if args.in_place and args.source:
+            raise ip.InitError("--in-place initializes the template copy in DIR; drop --from")
+        if args.source:
+            owner, repo, ref = ip.parse_gh_spec(args.source)
+            print(f"  downloading {owner}/{repo}{'@' + ref if ref else ''} …")
+            source = ip.fetch_github(owner, repo, ref)
+        if interactive:
+            print("  Setting up a new project. Defaults in [brackets]; Enter accepts.\n")
+        answers = ip.gather_answers(dest, given, ask=_ask if interactive else None)
+        if args.in_place:
+            result = ip.init_in_place(dest, answers, skills=not args.no_skills, force=args.force)
+        else:
+            result = ip.create_project(
+                dest, answers, source=source, skills=not args.no_skills,
+                force=args.force, git=args.git,
+            )
+    except (ip.InitError, ManifestError) as e:
+        print(f"  error: {e}", file=sys.stderr)
+        return 1
+
+    a = result.answers
+    print(f"\n  → {result.dest}  ({a.slug}, from {result.source})")
+    counts = [f"{len(result.written)} files written"]
+    if result.overwritten:
+        counts.append(f"{len(result.overwritten)} {'rewritten' if args.in_place else 'overwritten'}")
+    if result.removed:
+        counts.append("removed " + ", ".join(result.removed))
+    print("    " + "; ".join(counts))
+    print(f"    first presentation: presentations/{a.first}/")
+    if not args.no_skills:
+        print(
+            f"    agent skill: {ip.SKILL_DIRS[0]}/{ip.SKILL_NAME}/ (Claude Code: "
+            f"/{ip.SKILL_NAME}) and {ip.SKILL_DIRS[1]}/{ip.SKILL_NAME}/"
+        )
+    if result.git:
+        print(f"    git: {result.git}")
+    print("\n  next:")
+    if result.dest.resolve() != Path.cwd().resolve():
+        print(f"    cd {result.dest}")
+    print("    uv sync          # presentation-sanity + manim (needs ffmpeg, cairo, pango, LaTeX;")
+    print("                     #   `uv sync --no-default-groups` skips manim)")
+    print("    npm install      # Slidev + VitePress, links shared/")
+    print(f"    uv run presentation-sanity dev {a.first}")
+    return 0
+
+
+def cmd_skills(args: argparse.Namespace) -> int:
+    """Install (or refresh) the agent skill in an existing project."""
+    from . import init_project as ip
+
+    root = find_project_root(Path(args.root)) or Path(args.root).resolve()
+    try:
+        plan = ip.install_skill(root, force=args.force)
+    except ip.InitError as e:
+        print(f"  error: {e}", file=sys.stderr)
+        return 1
+    changed = len(plan.create) + len(plan.conflicts)
+    for base in ip.SKILL_DIRS:
+        print(f"  → {base}/{ip.SKILL_NAME}/")
+    print(f"    v{__version__}: {changed} file(s) written, {len(plan.unchanged)} already current")
+    return 0
+
+
+def cmd_pages_init(args: argparse.Namespace) -> int:
+    """Write the GitHub Pages workflow into a project."""
+    from . import pages
+
+    root = find_project_root(Path(args.root))
+    if root is None:
+        print(
+            "  error: `pages init` works in a project — a folder with manifest.yaml "
+            "and presentations/ (see `presentation-sanity init`)",
+            file=sys.stderr,
+        )
+        return 1
+    try:
+        report = pages.pages_init(
+            root, branch=args.branch, only_repo=args.only_repo, force=args.force
+        )
+    except (pages.PagesError, ManifestError) as e:
+        print(f"  error: {e}", file=sys.stderr)
+        return 1
+
+    print(f"  → {os.path.relpath(report.path)}")
+    for note in report.notes:
+        print(f"  ! {note}")
+    remote = pages.github_remote(root)
+    slug = "/".join(remote) if remote else "OWNER/REPO"
+    url = f"https://{remote[0]}.github.io/{remote[1]}/" if remote else "https://OWNER.github.io/REPO/"
+    print("\n  A Pages site is PUBLIC — even when the repository is private.")
+    print("\n  next:")
+    print("    1. Settings → Pages → Source: GitHub Actions, or")
+    print(f"       gh api -X POST repos/{slug}/pages -f build_type=workflow   (PUT if Pages is already on)")
+    print(f"    2. commit {pages.WORKFLOW_PATH} (with public/, uv.lock, package-lock.json)")
+    print(f"       and push to {args.branch}")
+    print(f"    3. the site appears at {url}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="presentation-sanity",
@@ -579,12 +748,82 @@ def build_parser() -> argparse.ArgumentParser:
     p_preview.add_argument("--no-open", action="store_true")
     p_preview.set_defaults(func=cmd_preview)
 
+    p_check = sub.add_parser(
+        "check",
+        parents=[common_root],
+        help="Check that every variable, scene, figure and \\cite a document uses exists",
+    )
+    p_check.add_argument(
+        "targets", nargs="*", metavar="TARGET",
+        help=target_help + " Default: everything (or the current presentation).",
+    )
+    p_check.set_defaults(func=cmd_check)
+
+    p_init = sub.add_parser(
+        "init",
+        help="Start a new project from the template in DIR (no git needed)",
+        description=(
+            "Copy the presentation-sanity-template snapshot that ships with this "
+            "release into DIR, name it, and install the agent skill. DIR may be new, "
+            "empty, or an existing folder to knit into: existing files are never "
+            "overwritten without --force. Unset answers are prompted for (or "
+            "defaulted with --yes)."
+        ),
+    )
+    p_init.add_argument("dir", nargs="?", default=".", metavar="DIR", help="Default: the current folder")
+    p_init.add_argument(
+        "--from", dest="source", default=None, metavar="gh:OWNER/REPO[@REF]",
+        help="Start from a GitHub repo (e.g. your lab's fork of the template) instead",
+    )
+    p_init.add_argument("--name", default=None, help="Project name (kebab-case; default: DIR's name)")
+    p_init.add_argument("--title", default=None, help="Project title")
+    p_init.add_argument("--author", default=None, help="Author name (default: git config user.name)")
+    p_init.add_argument("--email", default=None, help="Author email (default: git config user.email)")
+    p_init.add_argument("--description", default=None, help="One-line description")
+    p_init.add_argument(
+        "--first", default=None, metavar="FOLDER",
+        help="First presentation's folder under presentations/ (default: kickoff)",
+    )
+    p_init.add_argument("--deck-title", default=None, help="First presentation's title (default: --title)")
+    p_init.add_argument("-y", "--yes", action="store_true", help="Don't prompt; use defaults")
+    p_init.add_argument("--git", action="store_true", help="git init and make a first commit")
+    p_init.add_argument("--force", action="store_true", help="Overwrite files that already exist")
+    p_init.add_argument("--no-skills", action="store_true", help="Don't install the agent skill")
+    p_init.add_argument(
+        "--in-place", action="store_true",
+        help="Initialize a template copy where it stands (what the template's init.py runs)",
+    )
+    p_init.set_defaults(func=cmd_init)
+
+    p_skills = sub.add_parser(
+        "skills",
+        parents=[common_root],
+        help="Install or refresh the agent skill in .claude/skills/ and .agents/skills/",
+    )
+    p_skills.add_argument("--force", action="store_true", help="Overwrite a skill you've edited")
+    p_skills.set_defaults(func=cmd_skills)
+
+    p_pages = sub.add_parser("pages", help="Deploy to GitHub Pages")
+    pages_sub = p_pages.add_subparsers(dest="pages_command", required=True)
+    p_pages_init = pages_sub.add_parser(
+        "init",
+        parents=[common_root],
+        help="Write .github/workflows/pages.yml (builds without manim, deploys site/)",
+    )
+    p_pages_init.add_argument("--branch", default="main", help="Deploy on pushes to this branch")
+    p_pages_init.add_argument(
+        "--only-repo", default=None, metavar="OWNER/NAME",
+        help="Deploy only from this repository; forks and template copies skip the job",
+    )
+    p_pages_init.add_argument("--force", action="store_true", help="Overwrite an existing workflow")
+    p_pages_init.set_defaults(func=cmd_pages_init)
+
     return parser
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     return args.func(args)
 
 

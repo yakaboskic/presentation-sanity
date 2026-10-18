@@ -26,5 +26,10 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/presentation_sanity"]
 
+# The agent skill lives at the repo root (where .claude-plugin/ finds it);
+# `init` and `skills` copy it out of the installed package.
+[tool.hatch.build.targets.wheel.force-include]
+"skills/presentation-sanity" = "presentation_sanity/skills/presentation-sanity"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

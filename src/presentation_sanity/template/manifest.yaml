@@ -1,0 +1,116 @@
+# presentation-sanity manifest — the single source of configuration for a
+# *project*: one subject (a research program, a product, a grant) and every
+# presentation about it.
+#
+# Each folder under presentations/ that has a slides.md (a Slidev deck) and/or
+# a blog.md (a VitePress post) is one presentation. Nest folders to keep the
+# versions of a talk together:
+#
+#   presentations/kickoff/v1/slides.md
+#   presentations/kickoff/v2/slides.md      ← `presentation-sanity new kickoff/v2 --from kickoff/v1`
+#
+# Everything in this file is shared by all of them: a number, a scene or a
+# figure is defined once and reused by every deck and post.
+
+metadata:
+  title: "Presentation Sanity Demo"     # the project's name — heads site/index.html
+  description: "A single source of truth for slides and writing."
+  authors:                              # inherited by every presentation
+    - name: "Your Name"
+      email: "you@example.com"
+
+# ─── Outputs ────────────────────────────────────────────────────────────────
+# Defaults for every presentation. A presentation builds `slides` when it has a
+# slides.md and `blog` when it has a blog.md, into site/<presentation>/<output>/.
+# Settings here apply to all of them; a presentation's own manifest.yaml can
+# override any of them under its `outputs:`, or opt out with `blog: false`.
+outputs:
+  blog:
+    # ── Theming levers, all forwarded into the generated VitePress config ──
+    # Lifted into themeConfig:  nav, sidebar, socialLinks, outline, footer
+    # Any other theme option:   themeConfig: { logo, aside, search, editLink, … }
+    # Any other site option:    vitepress:  { appearance, lang, titleTemplate, … }
+    # Also accepted: head, markdown, exclude, lastUpdated, title, description.
+  slides:
+    # A deck's look (theme, transition, fonts) lives in its slides.md headmatter.
+    # base: "./"                # the default; decks work from any URL prefix
+
+# ─── Shared inputs ──────────────────────────────────────────────────────────
+# Everything below is consumed identically by every presentation.
+
+# Variables are read straight from this file by the `<DataValue>` component
+# (via @modyfi/vite-plugin-yaml) in both engines. Provenance metadata powers
+# the interactive provenance panel.
+variables:
+  num_samples:
+    value: 12453
+    format: ","
+    description: "Total samples after QC filtering"
+    source: "data/results.csv"
+    command: "python data/compute.py"
+    updated: "2026-04-29"
+  p_value:
+    value: 0.0087
+    format: ".2e"
+    description: "Primary genome-wide p-value"
+    source: "data/results.csv"
+    command: "python data/compute.py"
+    updated: "2026-04-29"
+  effect_size:
+    value: 0.342
+    format: ".3f"
+    description: "Mean effect size across discovery cohort"
+    # `data` (list) renders as a multi-line "inputs" node in the
+    # provenance graph. Use this when a value depends on multiple files.
+    # Falls back to `source:` (single file) when `data:` is absent.
+    data:
+      - "data/results.csv"
+      - "data/cohort_metadata.tsv"
+    command: "python scripts/effect_size.py --cohort discovery"
+    updated: "2026-04-29"
+
+# Manim scenes, rendered once to `public/manim/<key>.<format>` (plus a
+# last-frame poster). The deck embeds them with `layout: manim`; the blog
+# embeds the same file with `<ManimFigure scene="intro" />`.
+scenes:
+  intro:
+    source: "scenes/intro.py"
+    class: "IntroScene"
+    quality: "h"             # 1080p; use 'l' for fast iteration
+    format: "webm"
+
+# Excalidraw sources exported to `public/figures/<key>.<format>`, embedded
+# anywhere with `<FigureImage figure="<key>" />`.
+# figures:
+#   architecture:
+#     source: "figures/architecture.excalidraw"
+#     format: "svg"
+
+# LaTeX-shaped citing: \cite{key} in a document, \bibliography where the
+# reference list should go. Sources are parsed and each entry formatted at
+# build time, so the page ships plain anchors — no citation runtime.
+bibliography:
+  sources: ["refs.bib"]
+  style: numeric        # numeric → [1]  |  author-year → (Visscher et al., 2008)
+  sort: appearance      # appearance | author | year
+  title: "References"
+  # link: true          # turn the DOI / URL into a link
+
+# TeX settings. Macros belong here rather than in a \newcommand inside a
+# document: the renderer keeps one TeX instance for the whole build, so an
+# in-document definition leaks into every later block and page, and whether it
+# resolves depends on source order.
+math:
+  # tags: ams          # number display equations and enable \label / \eqref.
+                       # Counters run across the whole build and their starting
+                       # point depends on page order — fine for a single-page
+                       # post, but prefer explicit \tag{…} once there are
+                       # several pages, or reset with \setcounter{equation}{0}.
+  macros:
+    Var: "\\operatorname{Var}"
+    RR: "\\mathbb{R}"
+    norm: ["\\left\\lVert #1 \\right\\rVert", 1]
+
+  # environments: true   # allow bare \begin{align} … \end{align} at block
+                         # level, with no surrounding $$. Set false to require
+                         # $$ fencing, or pass an explicit list of env names.
