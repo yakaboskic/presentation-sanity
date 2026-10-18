@@ -41,7 +41,7 @@ in a project `PRESENTATION[:OUTPUT]` (e.g. `kickoff/v2:blog`).
 | `presentation-sanity preview blog` | `python http.server` on that output's dir | Smoke-test the static build (browsers won't load `file://`). |
 | `presentation-sanity export pdf` | `slidev export` | PDF output (slides only). |
 | `presentation-sanity export-pptx` | PPTX with **embedded, playable** manim video | PowerPoint that isn't just images. |
-| `presentation-sanity check` | Resolve every `<DataValue>`, scene, figure and `\cite` the documents use; warn about unrendered scenes and figures | Before you call it done. |
+| `presentation-sanity check` | Resolve every `<DataValue>`, scene, figure and `\cite` the documents use; warn about unrendered scenes and figures, and inline components that start a line | Before you call it done. |
 | `presentation-sanity skills` | (Re)install the agent skill into `.claude/skills/` and `.agents/skills/` | After upgrading the tool. |
 | `presentation-sanity pages init` | Write `.github/workflows/pages.yml` | Deploy to GitHub Pages ([below](#deploy-to-github-pages)). |
 

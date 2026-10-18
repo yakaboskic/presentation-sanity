@@ -13,7 +13,8 @@ It reads every presentation's documents and confirms that each
 `<DataValue var>`, manim `scene` (`layout: manim` or `<ManimFigure>`),
 `<FigureImage figure>` and `\cite` key is declared, and that each scene and
 figure has been rendered into `public/`. It exits non-zero on a missing
-reference. Fix what it reports. Don't silence it.
+reference. It also warns when a `<DataValue>` or `<FigureImage>` starts a line
+inside a paragraph (ground rule 6). Fix what it reports. Don't silence it.
 
 ## 2. Build what you touched
 

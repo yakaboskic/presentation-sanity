@@ -52,7 +52,8 @@ take a target `ID[:OUTPUT]`, e.g. `kickoff/v2:blog`. Folders without a
    `@shared/…`, not relative paths.
 6. **Keep a component tag off the start of a line** in markdown. markdown-it
    treats a line starting with `<Tag` as an HTML block and breaks the
-   paragraph. Wrap the text so the tag lands mid-line.
+   paragraph. Wrap the text so the tag lands mid-line. `check` warns about
+   each `<DataValue>` or `<FigureImage>` it finds there.
 7. **Check before you say done.** Run `uv run presentation-sanity check`
    (references) and build what you touched (see `check` mode). Report what
    you ran and what it said.

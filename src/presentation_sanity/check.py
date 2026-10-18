@@ -11,8 +11,10 @@ against the project manifest, without running Slidev or VitePress:
 
 An unknown reference is an error (the page would show `??key??` or `[?key]`).
 A declared scene or figure that hasn't been rendered is a warning: the build
-would ship an old file or none. Code spans, fenced code and HTML comments are
-skipped, as the renderers skip them.
+would ship an old file or none. So is an inline component (`<DataValue>`,
+`<FigureImage>`) that starts a line of a paragraph: markdown-it reads that line
+as an HTML block, which splits the paragraph. Code spans, fenced code and HTML
+comments are skipped, as the renderers skip them.
 """
 
 from __future__ import annotations
@@ -32,6 +34,11 @@ MANIMFIGURE = re.compile(_ATTR.format(tag="ManimFigure", attr="scene"))
 FIGUREIMAGE = re.compile(_ATTR.format(tag="FigureImage", attr="figure"))
 # The commands the blog's markdown-it rule understands (assets/vitepress/config.mts).
 CITE = re.compile(r"\\(?:cite|citep|citealp|citet|citealt|nocite)\s*(?:\[[^\]]*\])?\{([^}]*)\}")
+INLINE_START = re.compile(r"<(DataValue|FigureImage)\b[^>]*>?")
+# Lines that aren't paragraph text, so the line after one starts afresh: a tag
+# (an HTML block, or a component on its own line), a heading, a rule or `---`
+# separator, a Slidev slot (`::right::`).
+_NOT_PROSE = re.compile(r"<|#{1,6}(\s|$)|([-*_=]\s*){3,}$|::[\w-]+::$")
 _SKIP_DIRS = {"exports", "node_modules", ".slidev", "components", "layouts", "public"}
 
 
@@ -61,6 +68,32 @@ def _blank(text: str) -> str:
 
 def _line(text: str, offset: int) -> int:
     return text.count("\n", 0, offset) + 1
+
+
+def _line_starts(text: str) -> list[tuple[int, str]]:
+    """(line, tag) for each inline component starting a line of a paragraph.
+
+    Vue's markdown-it rule makes a line that starts with `<DataValue` or
+    `<FigureImage` an HTML block, even mid-paragraph. A tag alone between
+    blank lines is a block on purpose and passes, and so does everything in
+    an HTML block: from a line opening a lowercase tag (`<div>`) to the next
+    blank line. `text` has been through `_blank`.
+    """
+    found = []
+    prose = in_html = False
+    for n, line in enumerate(text.split("\n"), 1):
+        s = line.strip()
+        if not s:
+            prose = in_html = False
+            continue
+        if in_html or re.match(r"</?[a-z]", s):
+            in_html = True
+            continue
+        m = INLINE_START.match(s)
+        if m and (prose or s[m.end():].strip()):
+            found.append((n, m.group(1)))
+        prose = not _NOT_PROSE.match(s)
+    return found
 
 
 def _hint(key: str, known: list[str]) -> str:
@@ -141,6 +174,10 @@ def check_documents(manifest: Manifest, docs: list[tuple[Path, bool]]) -> Report
                 elif key not in bib:
                     err(path, line, f"\\cite{{{key}}}: no such key in the bibliography"
                         + _hint(key, sorted(bib)))
+        for line, tag in _line_starts(text):
+            report.warnings.append(Finding(
+                path, line, f"<{tag}> starts a line, so markdown-it splits the paragraph "
+                "there — move the tag off the start of the line"))
 
     for key, (path, line) in used_scenes.items():
         scene = manifest.scenes[key]

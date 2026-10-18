@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from presentation_sanity.cli import main
@@ -104,3 +105,76 @@ def test_check_passes_and_warns_about_unrendered(write, monkeypatch, capsys) -> 
     assert "scene `intro` isn't rendered" in out
     assert "figure `pipeline` isn't exported" in out
     assert "ok: every reference resolves" in out
+
+
+LINE_STARTS_BLOG = """\
+---
+title: Post
+---
+
+We saw
+<DataValue var="n" /> samples.
+
+<DataValue var="n" /> samples opened this paragraph.
+
+A figure in the middle of a sentence:
+<FigureImage figure="pipeline" />
+
+Mid-line <DataValue var="n" /> is fine.
+
+<FigureImage figure="pipeline" />
+
+<ManimFigure scene="intro" />
+
+## <DataValue var="n" /> in a heading
+<DataValue var="n" />
+
+<div class="note">
+<DataValue var="n" /> inside an HTML block.
+</div>
+
+`code` and
+`<DataValue var="n" />` in a code span.
+
+```md
+text
+<DataValue var="n" /> in a fence
+```
+
+<!--
+text
+<DataValue var="n" /> in a comment
+-->
+"""
+
+LINE_STARTS_DECK = """\
+---
+layout: two-cols
+---
+<DataValue var="n" />
+
+::right::
+<FigureImage figure="pipeline" />
+
+---
+
+Text then
+<DataValue var="n" />
+"""
+
+
+def test_check_warns_about_inline_components_at_line_start(write, monkeypatch, capsys) -> None:
+    root = write({
+        "manifest.yaml": MANIFEST,
+        "refs.bib": "@book{known, title={T}, year={2020}}\n",
+        "presentations/p/blog.md": LINE_STARTS_BLOG,
+        "presentations/p/slides.md": LINE_STARTS_DECK,
+    })
+    monkeypatch.chdir(root)
+    assert main(["check"]) == 0  # a warning, not an error
+    out = capsys.readouterr().out
+    flagged = re.findall(r"p/(\w+)\.md:(\d+)  <(\w+)> starts a line", out)
+    assert flagged == [
+        ("blog", "6", "DataValue"), ("blog", "8", "DataValue"), ("blog", "11", "FigureImage"),
+        ("slides", "12", "DataValue"),
+    ]
