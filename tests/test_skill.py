@@ -46,3 +46,13 @@ def test_plugin_manifest_matches_the_tool() -> None:
     plugin = json.loads((REPO / ".claude-plugin" / "plugin.json").read_text())
     assert plugin["name"] == "presentation-sanity"
     assert (REPO / "skills" / plugin["name"] / "SKILL.md").is_file()
+
+
+def test_versions_match_the_tool() -> None:
+    """Release step: the skill and plugin manifest are bumped with the tool."""
+    from presentation_sanity import __version__
+
+    meta = frontmatter((skill_dir() / "SKILL.md").read_text())
+    assert meta["metadata"]["version"] == __version__, "bump skills/…/SKILL.md"
+    plugin = json.loads((REPO / ".claude-plugin" / "plugin.json").read_text())
+    assert plugin["version"] == __version__, "bump .claude-plugin/plugin.json"
