@@ -15,8 +15,7 @@ Part of [Sanitism](https://sanitism.dev): built for autists to communicate their
 **Just give me a folder.** No clone, no git. It needs [uv](https://docs.astral.sh/uv/) and Node 20+:
 
 ```bash
-uvx --from "presentation-sanity @ git+https://github.com/yakaboskic/presentation-sanity.git@v0.4.2" \
-  presentation-sanity init my-talks --title "My talks" --first kickoff
+uvx presentation-sanity init my-talks --title "My talks" --first kickoff
 ```
 
 ```bash
