@@ -13,19 +13,27 @@ Ask the user (one message, all at once, with defaults):
 - whether they want git (`--git`). Without it the folder has no `.git`, which
   is fine for people who don't want GitHub.
 
-Then run the tool straight from its release, no install needed:
+Then run the newest release from PyPI, no install needed:
 
 ```bash
-uvx --from "presentation-sanity @ git+https://github.com/yakaboskic/presentation-sanity.git@v0.4.2" \
-  presentation-sanity init DIR --yes \
+uvx presentation-sanity@latest init DIR --yes \
   --title "Title" --author "Name" --email "me@lab.org" \
   --first kickoff --deck-title "Kickoff"
 ```
 
-Use the newest release tag (https://github.com/yakaboskic/presentation-sanity/releases)
-rather than the one written here, if it's newer. A lab that keeps its own fork
-of the template adds `--from gh:owner/repo[@ref]`. `GH_TOKEN` must be set for a
-private fork.
+`@latest` makes uvx check PyPI for a newer release instead of reusing a copy
+it cached earlier. The short form people type, `uvx presentation-sanity init
+DIR`, does the same on a machine that hasn't run it before. If PyPI can't be
+reached, or the user wants a GitHub release, run it from a tag
+(https://github.com/yakaboskic/presentation-sanity/releases) instead:
+
+```bash
+uvx --from "presentation-sanity @ git+https://github.com/yakaboskic/presentation-sanity.git@v0.4.2" \
+  presentation-sanity init DIR --yes --title "Title" --first kickoff
+```
+
+A lab that keeps its own fork of the template adds
+`--from gh:owner/repo[@ref]`. `GH_TOKEN` must be set for a private fork.
 
 **Knitting into an existing folder** (`DIR` has files already): `init` never
 overwrites. If it lists conflicts, show the user the list and ask. Then either

@@ -1,0 +1,83 @@
+# Publishing a GitHub release puts that version on PyPI, so
+# `uvx presentation-sanity init my-talks` gets it. Build, test, smoke-test the
+# wheel, then upload with PyPI trusted publishing: PyPI trusts this workflow
+# (repo yakaboskic/presentation-sanity, file release.yml, environment pypi), so
+# no API token is stored anywhere.
+#
+# Run it by hand (Actions → Release → Run workflow) for a dry run: it builds and
+# tests but only a published release uploads.
+name: Release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # No floating major tag exists for setup-uv past v7, so pin the release.
+      - uses: astral-sh/setup-uv@v10.3.0
+
+      - name: The release tag is the package version
+        if: github.event_name == 'release'
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          version=$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')
+          if [ "$TAG" != "v$version" ]; then
+            echo "::error::release $TAG, but pyproject.toml says $version (see Releasing in the README)"
+            exit 1
+          fi
+
+      - name: Test
+        run: |
+          uv sync --locked
+          uv run pytest
+
+      - name: Build the sdist and wheel
+        run: uv build
+
+      - name: Start a project from the wheel
+        working-directory: ${{ runner.temp }}
+        run: |
+          wheel=$(ls "$GITHUB_WORKSPACE"/dist/*.whl)
+          version=$(uvx --from "$wheel" presentation-sanity --version | awk '{print $NF}')
+          uvx --from "$wheel" presentation-sanity init smoke --yes \
+            --title "Smoke test" --author "CI" --email ci@example.org --first kickoff
+          test -f smoke/manifest.yaml
+          test -d smoke/presentations/kickoff
+          test -f smoke/.claude/skills/presentation-sanity/SKILL.md
+          test -f smoke/.agents/skills/presentation-sanity/SKILL.md
+          grep -F "presentation-sanity.git@v$version" smoke/pyproject.toml
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  publish:
+    name: Publish to PyPI
+    needs: build
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/presentation-sanity
+    permissions:
+      id-token: write  # trusted publishing: the job's OIDC token is the credential
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+
+      - uses: pypa/gh-action-pypi-publish@release/v1

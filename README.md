@@ -431,13 +431,18 @@ The group's `presentation-sanity[manim]` has no URL: uv takes it from the pinned
 
 Subject repos and the template pin release tags, so a change reaches them
 only through a release. Each release also carries a snapshot of the template
-(for `init`), so the two move together:
+(for `init`), so the two move together. Publishing a GitHub release puts the
+version on [PyPI](https://pypi.org/project/presentation-sanity/), which is
+where `uvx presentation-sanity` gets it. PyPI takes uploads only from
+`release.yml` in this repo's `pypi` environment (a trusted publisher, set up
+once), so no token is stored anywhere.
 
 1. Bump the version in four places: `version` in `pyproject.toml`,
    `__version__` in `src/presentation_sanity/__init__.py`, `metadata.version`
    in `skills/presentation-sanity/SKILL.md`, and `version` in
    `.claude-plugin/plugin.json` (`tests/test_skill.py` fails until they
-   agree). Update the tags in the snippets above.
+   agree). Update the versions in the snippets above (the `@X.Y.Z` pin, the
+   git+ fallback, the dependency line) and in the skill's `init` mode.
 2. In `presentation-sanity-template`, move the pin to the new tag (the
    `pyproject.toml` dependency line and the README's mentions), regenerate the
    demo workflow with `presentation-sanity pages init --force --only-repo
@@ -452,6 +457,13 @@ only through a release. Each release also carries a snapshot of the template
    git tag -a vX.Y.Z -m "vX.Y.Z — summary" && git push origin vX.Y.Z
    gh release create vX.Y.Z --verify-tag --title "vX.Y.Z — summary" --notes-file notes.md
    ```
+   Publishing the release runs [`release.yml`](.github/workflows/release.yml):
+   it checks the tag is the `pyproject.toml` version, runs the tests, builds
+   the sdist and wheel, starts a project from the wheel, and uploads both to
+   PyPI. Once it's green, `uvx presentation-sanity@X.Y.Z --version` prints
+   the new version. If it fails, nothing was uploaded: fix it on `main`,
+   delete the release and the tag, and cut them again. PyPI never takes the
+   same version twice, so once it's up, a fix is a new patch release.
 5. In the template, once the tag exists: `uv lock` (it resolves the new tag),
    build the example presentation (it renders its manim scene), commit
    `uv.lock` (and any re-rendered `public/manim/`), and push. The Pages
