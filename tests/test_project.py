@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from presentation_sanity.cli import main
 from presentation_sanity.manifest import ManifestError, load_manifest
 from presentation_sanity.markdown_meta import read_headmatter
 from presentation_sanity.project import (
@@ -240,6 +241,14 @@ def test_new_from_copies_and_records_lineage(write, project: Path) -> None:
     meta = yaml.safe_load((dest / "manifest.yaml").read_text())["metadata"]
     assert meta == {"from": "talk/v2"}
     assert load_project(project).presentations["talk/v3"].metadata["from"] == "talk/v2"
+
+
+def test_new_from_suggests_a_dev_target_that_resolves(project: Path, monkeypatch, capsys) -> None:
+    monkeypatch.chdir(project)
+    assert main(["new", "talk/v3", "--from", "talk/v1"]) == 0  # a deck and a post
+    assert "next: presentation-sanity dev talk/v3:slides" in capsys.readouterr().out
+    assert main(["new", "fresh"]) == 0  # a deck only
+    assert "next: presentation-sanity dev fresh\n" in capsys.readouterr().out
 
 
 def test_new_from_updates_an_existing_manifest(write, project: Path) -> None:

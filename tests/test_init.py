@@ -15,6 +15,7 @@ from presentation_sanity import __version__
 from presentation_sanity import init_project as ip
 from presentation_sanity.cli import main
 from presentation_sanity.markdown_meta import read_headmatter
+from presentation_sanity.project import load_project, pick_one
 
 ANSWERS = [
     "--name", "demo-talks", "--title", "Demo", "--author", "Ada Lovelace",
@@ -78,6 +79,18 @@ def test_init_into_new_dir_applies_renames(tmp_path: Path, capsys) -> None:
 
     out = capsys.readouterr().out
     assert "uv sync" in out and "npm install" in out
+
+
+def test_init_dev_commands_name_an_output(tmp_path: Path, capsys) -> None:
+    """The first presentation has a deck and a post, so a bare `dev kickoff` would refuse."""
+    dest = tmp_path / "x"
+    assert main(["init", str(dest), *ANSWERS]) == 0
+    project = load_project(dest)
+    for text in (capsys.readouterr().out, (dest / "README.md").read_text()):
+        targets = re.findall(r"presentation-sanity dev (\S+)", text)
+        assert targets
+        for target in targets:
+            pick_one(project, target, dest)  # raises "several outputs — name one"
 
 
 def test_init_nested_first_and_quoting(tmp_path: Path) -> None:

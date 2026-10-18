@@ -40,7 +40,7 @@ presentation-sanity project.
 ## Loop
 
 ```bash
-uv run presentation-sanity dev <id>          # http://localhost:3030, hot reload
+uv run presentation-sanity dev <id>:slides   # http://localhost:3030, hot reload
 uv run presentation-sanity check <id>
 uv run presentation-sanity build <id>:slides
 ```

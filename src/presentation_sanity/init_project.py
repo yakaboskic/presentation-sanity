@@ -325,7 +325,8 @@ components and layouts.
 uv sync                                       # Python deps (presentation-sanity + manim)
 npm install                                   # Slidev + VitePress (+ links shared/)
 uv run presentation-sanity list               # presentations in this project
-uv run presentation-sanity dev {a.first}         # Slidev hot-reload at :3030
+uv run presentation-sanity dev {a.first}:slides  # Slidev hot-reload at :3030
+uv run presentation-sanity dev {a.first}:blog    # VitePress hot-reload at :5173
 uv run presentation-sanity new {a.first}-v2 --from {a.first}   # fork a new version
 uv run presentation-sanity build              # everything → site/ (+ site/index.html)
 uv run presentation-sanity preview            # serve site/ at :8000

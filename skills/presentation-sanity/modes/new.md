@@ -42,4 +42,4 @@ presentation folder by hand.
   `date`, `venue`, and `authors` when they differ from the project's.
 - Numbers that differ in this version get **new** variable keys (see
   `variables`). Don't edit the values the old version shows.
-- `uv run presentation-sanity check <id>`, then offer `dev <id>`.
+- `uv run presentation-sanity check <id>`, then offer `dev <id>:slides`.

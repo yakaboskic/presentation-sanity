@@ -60,5 +60,5 @@ machine (`brew install ffmpeg cairo pango` plus BasicTeX on macOS). If those
 are missing and the user doesn't need to render scenes yet, use
 `uv sync --no-default-groups`. The committed videos still show up.
 
-Finish by offering `uv run presentation-sanity dev <first>` (it runs until
-stopped) and pointing at `/presentation-sanity slides`.
+Finish by offering `uv run presentation-sanity dev <first>:slides` (it runs
+until stopped) and pointing at `/presentation-sanity slides`.

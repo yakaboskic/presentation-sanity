@@ -368,7 +368,7 @@ uvx --from "presentation-sanity @ git+https://github.com/yakaboskic/presentation
 cd my-talks
 uv sync          # presentation-sanity, plus manim through the default `manim` group
 npm install      # Slidev + VitePress; links shared/
-uv run presentation-sanity dev kickoff
+uv run presentation-sanity dev kickoff:slides   # or kickoff:blog for the post
 ```
 
 `init` copies the snapshot of

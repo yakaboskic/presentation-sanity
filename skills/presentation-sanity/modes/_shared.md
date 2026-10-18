@@ -71,7 +71,7 @@ table when they disagree.
 |---|---|
 | `list` | presentations, their outputs, what's built |
 | `new ID [--from ID] [--title T]` | new presentation, or a fork into a new version |
-| `dev ID[:blog]` | hot-reload server (deck :3030, blog :5173) |
+| `dev ID:slides` / `dev ID:blog` | hot-reload server (deck :3030, blog :5173); `ID` alone only if it has one output |
 | `build [ID…] [--skip-manim] [--base /prefix/]` | figures → manim → outputs → `site/` |
 | `build-manim [--force]` / `build-figures [--force]` | render only the stale scenes / figures |
 | `check [ID…]` | every variable, scene, figure and citation a document uses exists |

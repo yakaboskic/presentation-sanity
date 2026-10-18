@@ -393,14 +393,19 @@ def cmd_new(args: argparse.Namespace) -> int:
             )
         project = load_project(root)
         dest = create_presentation(project, args.id, from_id=args.from_id, title=args.title)
+        pid = dest.relative_to(root / "presentations").as_posix()
+        # A fork has every output its source had, and `dev` needs one named.
+        outputs = load_project(root).presentations[pid].outputs
+        target = pid
+        if len(outputs) > 1:
+            target += ":" + min(outputs, key=lambda k: outputs[k].engine != "slidev")
     except Exception as e:
         return _fail(e, args.verbose)
 
-    pid = dest.relative_to(root / "presentations").as_posix()
     print(f"  → {os.path.relpath(dest)}")
     if args.from_id:
         print(f"  forked from {args.from_id}; edit {pid}/slides.md headmatter to retitle")
-    print(f"  next: presentation-sanity dev {pid}")
+    print(f"  next: presentation-sanity dev {target}")
     return 0
 
 
@@ -509,7 +514,7 @@ def cmd_init(args: argparse.Namespace) -> int:
     print("    uv sync          # presentation-sanity + manim (needs ffmpeg, cairo, pango, LaTeX;")
     print("                     #   `uv sync --no-default-groups` skips manim)")
     print("    npm install      # Slidev + VitePress, links shared/")
-    print(f"    uv run presentation-sanity dev {a.first}")
+    print(f"    uv run presentation-sanity dev {a.first}:slides   # or :blog for the post")
     return 0
 
 
