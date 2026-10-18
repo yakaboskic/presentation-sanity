@@ -16,7 +16,7 @@ Ask the user (one message, all at once, with defaults):
 Then run the tool straight from its release, no install needed:
 
 ```bash
-uvx --from "presentation-sanity @ git+https://github.com/yakaboskic/presentation-sanity.git@v0.4.1" \
+uvx --from "presentation-sanity @ git+https://github.com/yakaboskic/presentation-sanity.git@v0.4.2" \
   presentation-sanity init DIR --yes \
   --title "Title" --author "Name" --email "me@lab.org" \
   --first kickoff --deck-title "Kickoff"

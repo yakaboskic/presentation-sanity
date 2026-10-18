@@ -363,7 +363,7 @@ executed at build time. Keeping the build hermetic on purpose.
 One command, no clone and no git:
 
 ```bash
-uvx --from "presentation-sanity @ git+https://github.com/yakaboskic/presentation-sanity.git@v0.4.1" \
+uvx --from "presentation-sanity @ git+https://github.com/yakaboskic/presentation-sanity.git@v0.4.2" \
   presentation-sanity init my-talks --title "My talks" --first kickoff
 cd my-talks
 uv sync          # presentation-sanity, plus manim through the default `manim` group
@@ -414,7 +414,7 @@ requires-python = ">=3.10"
 # Pin a release tag (https://github.com/yakaboskic/presentation-sanity/releases),
 # not @main; to upgrade, change the tag and run `uv lock`.
 dependencies = [
-    "presentation-sanity @ git+https://github.com/yakaboskic/presentation-sanity.git@v0.4.1",
+    "presentation-sanity @ git+https://github.com/yakaboskic/presentation-sanity.git@v0.4.2",
 ]
 
 # manim (the machine needs ffmpeg, cairo, pango and LaTeX). A default group:
