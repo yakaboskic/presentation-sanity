@@ -67,6 +67,7 @@ def test_init_into_new_dir_applies_renames(tmp_path: Path, capsys) -> None:
     assert not (dest / "presentations" / "example").exists()
     assert read_headmatter(dest / "presentations/kickoff/slides.md")["title"] == "Demo"
     assert (dest / "presentations/kickoff/blog.md").is_file()
+    assert not (dest / "uv.lock").exists()  # the first `uv sync` writes the project's own
     readme = (dest / "README.md").read_text()
     assert readme.startswith("# demo-talks") and "dev kickoff" in readme
 
@@ -78,7 +79,7 @@ def test_init_into_new_dir_applies_renames(tmp_path: Path, capsys) -> None:
         assert (dest / base / "presentation-sanity" / "modes" / "_shared.md").is_file()
 
     out = capsys.readouterr().out
-    assert "uv sync" in out and "npm install" in out
+    assert "uv sync" in out and "npm install" in out and "commit it" in out
 
 
 def test_init_dev_commands_name_an_output(tmp_path: Path, capsys) -> None:
@@ -131,6 +132,24 @@ def test_bad_answers_are_refused(tmp_path: Path) -> None:
         answers(slug="no spaces please")
     with pytest.raises(ip.InitError):
         answers(first="../escape")
+
+
+@pytest.mark.skipif(not (shutil.which("uv") and shutil.which("git")), reason="needs uv and git")
+def test_first_uv_lock_resolves_the_pinned_tag(tmp_path: Path) -> None:
+    """What `pages init`'s `uv sync --locked` needs: a lock for this project's own pin."""
+    dest = tmp_path / "x"
+    assert main(["init", str(dest), *ANSWERS, "--no-skills"]) == 0
+    pin = re.search(r"presentation-sanity\.git@(v[^\"]+)", (dest / "pyproject.toml").read_text()).group(1)
+    tag = subprocess.run(
+        ["git", "ls-remote", "--exit-code", "--tags",
+         "https://github.com/yakaboskic/presentation-sanity.git", f"refs/tags/{pin}"],
+        capture_output=True, timeout=30,
+    )
+    if tag.returncode != 0:  # 2: not tagged yet (a release runs its tests first); else offline
+        pytest.skip(f"{pin} isn't published" if tag.returncode == 2 else "GitHub unreachable")
+    lock = subprocess.run(["uv", "lock"], cwd=dest, capture_output=True, text=True, timeout=600)
+    assert lock.returncode == 0, lock.stderr
+    assert f"presentation-sanity.git?rev={pin}#" in (dest / "uv.lock").read_text()
 
 
 # ── knitting into an existing folder ─────────────────────────────────────────
@@ -191,6 +210,8 @@ def test_git_makes_a_first_commit(tmp_path: Path, monkeypatch) -> None:
     assert log.stdout.count("\n") == 1 and "demo-talks" in log.stdout
     tracked = subprocess.run(["git", "ls-files"], cwd=dest, capture_output=True, text=True).stdout
     assert "manifest.yaml" in tracked and ".claude/skills/presentation-sanity/SKILL.md" in tracked
+    ignored = subprocess.run(["git", "check-ignore", "-q", "uv.lock"], cwd=dest)
+    assert ignored.returncode == 1  # the lock `uv sync` writes gets committed
 
 
 # ── --in-place (the template's init.py) ─────────────────────────────────────
@@ -203,6 +224,7 @@ def template_copy(tmp_path: Path) -> Path:
     (root / "init.py").write_text("# shim\n")
     (root / ".github/workflows").mkdir(parents=True)
     (root / ".github/workflows/pages.yml").write_text("# demo deploy\n")
+    (root / "uv.lock").write_text("# the template's lock\n")
     return root
 
 
@@ -213,6 +235,7 @@ def test_in_place_renames_and_removes_template_files(tmp_path: Path) -> None:
     assert (root / "presentations/kickoff/slides.md").is_file()
     assert not (root / "presentations/example").exists()
     assert not (root / "init.py").exists()
+    assert not (root / "uv.lock").exists()  # it locks the template under its old name
     assert not (root / ".github").exists()  # no empty folders left behind
     assert (root / ".claude/skills/presentation-sanity/SKILL.md").is_file()
     # a second run finds nothing to initialize
@@ -256,7 +279,7 @@ def test_tarball_strips_top_dir_and_drops_links() -> None:
 
 def test_init_from_github_fork(tmp_path: Path, monkeypatch) -> None:
     template, _ = ip.bundled_template()
-    fork = {**template, "init.py": b"# shim\n", "LAB.md": b"lab house rules\n"}
+    fork = {**template, "init.py": b"# shim\n", "uv.lock": b"# fork's lock\n", "LAB.md": b"lab house rules\n"}
     seen: list[str] = []
 
     class Response(io.BytesIO):
@@ -275,7 +298,7 @@ def test_init_from_github_fork(tmp_path: Path, monkeypatch) -> None:
     assert main(["init", str(dest), "--from", "gh:lab/talks-template@v2", *ANSWERS]) == 0
     assert seen == ["https://api.github.com/repos/lab/talks-template/tarball/v2"]
     assert (dest / "LAB.md").read_text() == "lab house rules\n"
-    assert not (dest / "init.py").exists()
+    assert not (dest / "init.py").exists() and not (dest / "uv.lock").exists()
     # a fork's pin is the fork's business: left as the fork wrote it
     pin = re.search(r"presentation-sanity\.git@(v[^\"]+)", template["pyproject.toml"].decode()).group(1)
     assert f"presentation-sanity.git@{pin}" in (dest / "pyproject.toml").read_text()

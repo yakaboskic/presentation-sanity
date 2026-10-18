@@ -41,9 +41,12 @@ Files = dict[str, bytes]  # posix path relative to the project root → content
 TEMPLATE_REPO = "yakaboskic/presentation-sanity-template"
 EXAMPLE_DIR = "presentations/example"
 # Files that belong to the template repo itself, never to a project made from
-# it: the bootstrap shim, and the workflow that deploys the template's demo
-# (Pages is opt-in per project — `presentation-sanity pages init`).
-TEMPLATE_ONLY = ("init.py", ".github/workflows/pages.yml")
+# it: the bootstrap shim, the workflow that deploys the template's demo (Pages
+# is opt-in per project — `presentation-sanity pages init`), and the lock. The
+# lock names the template's own package, which init renames, and a release's
+# snapshot is taken before the template re-locks against that release's tag,
+# so `uv sync --locked` would refuse it. A project's first `uv sync` writes its own.
+TEMPLATE_ONLY = ("init.py", ".github/workflows/pages.yml", "uv.lock")
 
 SKILL_NAME = "presentation-sanity"
 # Claude Code reads .claude/skills/; Codex, Pi, Cursor and other agents read
@@ -322,7 +325,7 @@ components and layouts.
 ## Develop
 
 ```bash
-uv sync                                       # Python deps (presentation-sanity + manim)
+uv sync                                       # Python deps (presentation-sanity + manim); writes uv.lock
 npm install                                   # Slidev + VitePress (+ links shared/)
 uv run presentation-sanity list               # presentations in this project
 uv run presentation-sanity dev {a.first}:slides  # Slidev hot-reload at :3030
@@ -331,6 +334,9 @@ uv run presentation-sanity new {a.first}-v2 --from {a.first}   # fork a new vers
 uv run presentation-sanity build              # everything → site/ (+ site/index.html)
 uv run presentation-sanity preview            # serve site/ at :8000
 ```
+
+The first `uv sync` writes `uv.lock`. Commit it: the GitHub Pages workflow
+(`presentation-sanity pages init`) installs from it with `uv sync --locked`.
 
 Rendering manim scenes needs `ffmpeg`, `cairo`, `pango` and a LaTeX install.
 Without them, `uv sync --no-default-groups` skips manim and `build` uses the

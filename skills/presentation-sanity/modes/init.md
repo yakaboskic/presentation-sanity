@@ -50,10 +50,13 @@ removes itself.
 
 ```bash
 cd DIR
-uv sync          # presentation-sanity + manim
+uv sync          # presentation-sanity + manim; writes uv.lock
 npm install      # Slidev + VitePress; links shared/
 uv run presentation-sanity list
 ```
+
+`init` doesn't copy the template's `uv.lock`, so `uv sync` writes one for this
+project. It belongs in the repo: the Pages workflow installs from it.
 
 `uv sync` builds manim, which needs ffmpeg, cairo, pango and LaTeX on the
 machine (`brew install ffmpeg cairo pango` plus BasicTeX on macOS). If those

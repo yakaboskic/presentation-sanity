@@ -512,7 +512,8 @@ def cmd_init(args: argparse.Namespace) -> int:
     if result.dest.resolve() != Path.cwd().resolve():
         print(f"    cd {result.dest}")
     print("    uv sync          # presentation-sanity + manim (needs ffmpeg, cairo, pango, LaTeX;")
-    print("                     #   `uv sync --no-default-groups` skips manim)")
+    print("                     #   `uv sync --no-default-groups` skips manim);")
+    print("                     #   it writes uv.lock: commit it with the project")
     print("    npm install      # Slidev + VitePress, links shared/")
     print(f"    uv run presentation-sanity dev {a.first}:slides   # or :blog for the post")
     return 0

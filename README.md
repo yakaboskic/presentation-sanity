@@ -371,6 +371,10 @@ npm install      # Slidev + VitePress; links shared/
 uv run presentation-sanity dev kickoff:slides   # or kickoff:blog for the post
 ```
 
+`init` doesn't copy the template's `uv.lock`, so the first `uv sync` locks
+the new project against its own pin. Commit that `uv.lock`: the Pages
+workflow installs with `uv sync --locked`.
+
 `init` copies the snapshot of
 [`presentation-sanity-template`](https://github.com/yakaboskic/presentation-sanity-template)
 that ships inside this release, so a project made by vX.Y.Z is the template
@@ -617,8 +621,8 @@ only through a release. Each release also carries a snapshot of the template
 5. In the template, once the tag exists: `uv lock` (it resolves the new tag),
    build the example presentation (it renders its manim scene), commit
    `uv.lock` (and any re-rendered `public/manim/`), and push. The Pages
-   workflow deploys the demo. The snapshot keeps the previous lock; `uv sync`
-   in a new project re-locks it.
+   workflow deploys the demo. The snapshot has no lock (`init` would skip
+   it anyway): a new project's first `uv sync` writes its own.
 
 ## Subject layout
 
