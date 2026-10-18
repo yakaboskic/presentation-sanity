@@ -1,6 +1,6 @@
 [project]
 name = "presentation-sanity"
-version = "0.4.0"
+version = "0.4.1"
 description = "Build slides and blogs from a single manifest.yaml — one project, many presentations and versions sharing variables, provenance, manim scenes and figures, rendered by Slidev and VitePress."
 readme = "README.md"
 requires-python = ">=3.10"
