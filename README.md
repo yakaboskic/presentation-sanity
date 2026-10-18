@@ -6,6 +6,8 @@ the **outputs** that render them: a Slidev deck, a VitePress blog post, or both.
 Static and deployable; manim baked in. Sibling project to
 [`document-sanity`](https://github.com/yakaboskic/document-sanity) — same
 philosophy (one source of config, multiple build targets, version-friendly).
+Both are part of [Sanitism](https://sanitism.dev): built for autists to
+communicate their work, sanely.
 
 Slides and a blog post are two printouts of the same material, not two
 projects. Slidev and VitePress sit on the same substrate (Vite + Vue 3 +
@@ -26,6 +28,7 @@ in a project `PRESENTATION[:OUTPUT]` (e.g. `kickoff/v2:blog`).
 
 | Command | What runs | When to use |
 |---|---|---|
+| `presentation-sanity init my-talks` | Copy the bundled template into a folder, name it, install the agent skill | Start a project, no git needed ([below](#start-a-project)). |
 | `presentation-sanity list` | List the presentations (in a project) or outputs (`outputs` is an alias) | Check what exists and what's built. |
 | `presentation-sanity new kickoff/v2 --from kickoff/v1` | Copy a presentation into a new folder and record the lineage | Start a new version (project only). |
 | `presentation-sanity build` | Validate manifest → export stale figures → render stale manim scenes → render **every** output | Build everything. |
@@ -38,6 +41,9 @@ in a project `PRESENTATION[:OUTPUT]` (e.g. `kickoff/v2:blog`).
 | `presentation-sanity preview blog` | `python http.server` on that output's dir | Smoke-test the static build (browsers won't load `file://`). |
 | `presentation-sanity export pdf` | `slidev export` | PDF output (slides only). |
 | `presentation-sanity export-pptx` | PPTX with **embedded, playable** manim video | PowerPoint that isn't just images. |
+| `presentation-sanity check` | Resolve every `<DataValue>`, scene, figure and `\cite` the documents use; warn about unrendered scenes and figures | Before you call it done. |
+| `presentation-sanity skills` | (Re)install the agent skill into `.claude/skills/` and `.agents/skills/` | After upgrading the tool. |
+| `presentation-sanity pages init` | Write `.github/workflows/pages.yml` | Deploy to GitHub Pages ([below](#deploy-to-github-pages)). |
 
 `build` degrades gracefully when manim isn't installed: it logs a clear
 message and continues to the renderers, using whatever pre-rendered videos
@@ -352,28 +358,68 @@ Variable provenance fields (`description`, `source`, `command`, `updated`)
 are **informational** — they show up in `<DataValue>` tooltips but are not
 executed at build time. Keeping the build hermetic on purpose.
 
-## Use it for your subject (recommended)
+## Start a project
 
-Create a separate repo per subject and declare `presentation-sanity` as a
-dependency. Mirrors the [`document-sanity` paper-repo pattern](https://github.com/yakaboskic/document-sanity).
-Use [`presentation-sanity-template`](https://github.com/yakaboskic/presentation-sanity-template)
-as your starting point — clone it (or use it as a GitHub template) and edit.
+One command, no clone and no git:
 
-**`pyproject.toml`** (subject repo):
+```bash
+uvx --from "presentation-sanity @ git+https://github.com/yakaboskic/presentation-sanity.git@v0.4.0" \
+  presentation-sanity init my-talks --title "My talks" --first kickoff
+cd my-talks
+uv sync          # presentation-sanity, plus manim through the default `manim` group
+npm install      # Slidev + VitePress; links shared/
+uv run presentation-sanity dev kickoff
+```
+
+`init` copies the snapshot of
+[`presentation-sanity-template`](https://github.com/yakaboskic/presentation-sanity-template)
+that ships inside this release, so a project made by vX.Y.Z is the template
+vX.Y.Z was released with, and its dependency line is pinned back to vX.Y.Z.
+
+- **Answers** are prompted for, or given as flags: `--name` (default: the
+  folder's name), `--title`, `--author` and `--email` (default: your git
+  config), `--description`, `--first` (the first presentation's folder,
+  default `kickoff`; `kickoff/v1` groups versions from the start) and
+  `--deck-title`. `--yes` takes the defaults for anything unset. They rename
+  the project in `pyproject.toml`, `package.json`, `package-lock.json`,
+  `manifest.yaml` and `README.md`, and move `presentations/example/` to the
+  first presentation.
+- **The folder** can be new, empty, or an existing one to knit into (`init
+  .`). Everything is assembled in memory first. If any file would be
+  replaced, `init` lists them and writes nothing; `--force` overwrites them.
+- **`--git`** adds `git init` and a first commit. Without it there's no `.git`.
+- **`--from gh:owner/repo[@ref]`** starts from a GitHub tarball instead, e.g.
+  your lab's fork of the template. No git binary needed; `GH_TOKEN` (or
+  `GITHUB_TOKEN`) reaches a private fork. A fork's own pin is left alone.
+- **The agent skill** goes into `.claude/skills/presentation-sanity/` and
+  `.agents/skills/presentation-sanity/` unless `--no-skills` ([below](#agent-skill)).
+
+On GitHub, **"Use this template"** on presentation-sanity-template works too:
+its `init.py` is a thin shim that runs `presentation-sanity init --in-place`
+with the pinned version, so both ways share one code path.
+
+### The subject repo's dependencies
+
+**`pyproject.toml`**, as the template writes it:
 
 ```toml
 [project]
-name = "my-talk"
+name = "my-talks"
 version = "0.1.0"
 requires-python = ">=3.10"
-# The [manim] extra lets `build` render scenes (the machine needs ffmpeg,
-# cairo, pango and LaTeX); drop it for a deploy environment that only
-# serves committed videos from public/manim/.
 # Pin a release tag (https://github.com/yakaboskic/presentation-sanity/releases),
 # not @main; to upgrade, change the tag and run `uv lock`.
 dependencies = [
-    "presentation-sanity[manim] @ git+https://github.com/yakaboskic/presentation-sanity.git@v0.3.0",
+    "presentation-sanity @ git+https://github.com/yakaboskic/presentation-sanity.git@v0.4.0",
 ]
+
+# manim (the machine needs ffmpeg, cairo, pango and LaTeX). A default group:
+# `uv sync` installs it; `uv sync --no-default-groups` leaves it out.
+[dependency-groups]
+manim = ["presentation-sanity[manim]"]
+
+[tool.uv]
+default-groups = ["manim"]
 
 [build-system]
 requires = ["hatchling"]
@@ -386,8 +432,14 @@ allow-direct-references = true
 bypass-selection = true        # the deck repo has no importable Python
 ```
 
-**`package.json`** (subject repo) — install only the engines you actually use;
-a blog-only repo can drop the Slidev dependencies entirely:
+The group's `presentation-sanity[manim]` has no URL: uv takes it from the
+pinned line, so an upgrade is still one tag. Keeping manim out of the main
+dependency line is what lets a deploy runner, or a co-author without the
+native tools, install with `--no-default-groups` and build against the
+committed videos in `public/manim/`.
+
+**`package.json`**: install only the engines you actually use. A blog-only
+repo can drop the Slidev dependencies entirely:
 
 ```json
 {
@@ -401,25 +453,93 @@ a blog-only repo can drop the Slidev dependencies entirely:
   "devDependencies": {
     "@modyfi/vite-plugin-yaml": "^1.1.1",
     "markdown-it-mathjax3": "^4.3.2",
-    "vitepress": "^1.6.3"
-  }
+    "vitepress": "^1.6.3",
+    "psanity-shared": "file:./shared"
+  },
+  "slidev": { "addons": ["psanity-shared"] }
 }
 ```
 
 Then:
 
 ```bash
-uv sync                                   # installs presentation-sanity (no manim by default)
-npm install                               # installs the JS engines
-uv run presentation-sanity outputs        # what this subject declares
+uv sync                                   # presentation-sanity, with manim
+npm install                               # the JS engines
+uv run presentation-sanity list           # what this project holds
+uv run presentation-sanity check          # every reference resolves?
 uv run presentation-sanity build          # full pipeline → site/
-uv run presentation-sanity preview blog   # http://localhost:8000
+uv run presentation-sanity preview        # http://localhost:8000
 ```
 
-To render manim scenes locally, swap the dep to
-`presentation-sanity[manim]` and `uv sync` again. The `[manim]` extra pulls
-manim + cairo + pango bindings; once the videos are rendered into
-`public/manim/`, you can drop `[manim]` for deploy.
+## Agent skill
+
+`skills/presentation-sanity/` is a skill for coding agents: a router
+(`SKILL.md`, invoked as `/presentation-sanity [mode]` in Claude Code) and one
+file per mode under `modes/`: `_shared` (the ground rules), `init`, `new`,
+`slides`, `blog`, `manim`, `figures`, `variables`, `cite`, `export`, `check`
+and `deploy`.
+
+- **It explains; the CLI does.** Every mode works through commands (`new`,
+  `check`, `build`, `pages init`, …) rather than having the agent write
+  generated files. When a step is deterministic, it belongs in the CLI.
+- **It finds the project** from its sentinel files (`manifest.yaml` next to
+  `presentations/`, or a `package.json` depending on `psanity-shared`) and
+  resolves every path from there.
+- **It checks the version.** It runs `presentation-sanity --version`, and
+  when that differs from the version the skill was written for, it trusts
+  `--help` over its own text.
+- **It asks before anything public.** The deploy mode warns that a Pages site
+  is public even from a private repository, and waits for a yes.
+
+The wheel carries the skill. `init` installs it into new projects, and
+`presentation-sanity skills [--force]` installs or refreshes it in an existing
+one. Run that after upgrading, so the skill matches the tool. The repo is also
+a Claude Code plugin (`.claude-plugin/plugin.json`).
+
+## Deploy to GitHub Pages
+
+> A GitHub Pages site is **public**, even when the repository is private.
+
+```bash
+uv run presentation-sanity pages init      # → .github/workflows/pages.yml
+```
+
+Then turn Pages on (Settings → Pages → Source: **GitHub Actions**, or
+`gh api -X POST repos/OWNER/REPO/pages -f build_type=workflow`) and push to
+`main`. On each push the workflow:
+
+1. checks out the repo and asks `actions/configure-pages` for the site's base
+   path (`/<repo>` for a project site, empty for a custom domain or a
+   `<user>.github.io` repo);
+2. sets up uv and Node, then runs `uv sync --locked --no-default-groups` and
+   `npm ci`;
+3. runs `presentation-sanity build --skip-manim --skip-figures --base
+   "<base path>/"` (VitePress needs the absolute base);
+4. uploads `site/` and deploys it.
+
+**Why the runner never renders manim.** Rendering needs cairo, pango, ffmpeg
+and LaTeX, and with manim on the main dependency line a plain `uv sync` would
+compile the cairo bindings before anything else ran. Installing those on every
+push is slow and fragile (MathTex wants a TeX distribution). So the workflow
+installs without the `manim` group and deploys the videos committed in
+`public/manim/`: the render you looked at, not a fresh one that might differ.
+Figures work the same way.
+
+`pages init` checks the project can deploy that way before it writes anything:
+
+- it **refuses** a project whose `[project]` dependencies still say
+  `presentation-sanity[manim] @ …`, and prints the move into a `manim` group;
+- it **notes** a missing `uv.lock` or `package-lock.json` (the workflow
+  installs from both), and declared scenes or figures that aren't rendered
+  yet or that `.gitignore` would keep out of the repo.
+
+Options: `--branch` (default `main`), `--only-repo OWNER/NAME` (forks and
+template copies skip the job; the template uses this for its own demo at
+<https://yakaboskic.github.io/presentation-sanity-template/>), `--force` to
+regenerate. Action versions at the time of writing: `actions/checkout@v7`,
+`configure-pages@v6`, `setup-node@v7`, `upload-pages-artifact@v5`,
+`deploy-pages@v5`, and `astral-sh/setup-uv@v10.3.0` (setup-uv publishes no
+floating major tag).
 
 ## Subdirectory deploys
 
@@ -472,20 +592,33 @@ presentation-sanity = { path = "../presentation-sanity", editable = true }
 ### Releasing
 
 Subject repos and the template pin release tags, so a change reaches them
-only through a release:
+only through a release. Each release also carries a snapshot of the template
+(for `init`), so the two move together:
 
-1. Bump `version` in `pyproject.toml` and `__version__` in
-   `src/presentation_sanity/__init__.py`, update the tag in the dependency
-   snippet above, run `uv run pytest`, and push to `main`.
-2. Tag and publish:
+1. Bump the version in four places: `version` in `pyproject.toml`,
+   `__version__` in `src/presentation_sanity/__init__.py`, `metadata.version`
+   in `skills/presentation-sanity/SKILL.md`, and `version` in
+   `.claude-plugin/plugin.json` (`tests/test_skill.py` fails until they
+   agree). Update the tags in the snippets above.
+2. In `presentation-sanity-template`, move the pin to the new tag (the
+   `pyproject.toml` dependency line and the README's mentions), regenerate the
+   demo workflow with `presentation-sanity pages init --force --only-repo
+   yakaboskic/presentation-sanity-template`, and commit.
+3. Back here, refresh the snapshot from that commit and commit it:
+   ```bash
+   uv run python scripts/sync_template.py      # tracked files only, via git archive
+   uv run pytest
+   ```
+4. Push to `main`, then tag and publish:
    ```bash
    git tag -a vX.Y.Z -m "vX.Y.Z — summary" && git push origin vX.Y.Z
    gh release create vX.Y.Z --verify-tag --title "vX.Y.Z — summary" --notes-file notes.md
    ```
-3. Move the template to it: in `presentation-sanity-template`, change the tag in
-   the `pyproject.toml` dependency line and in the README's "Upgrading
-   presentation-sanity" example; run `uv lock`, build the example presentation
-   (it renders its manim scene), and push.
+5. In the template, once the tag exists: `uv lock` (it resolves the new tag),
+   build the example presentation (it renders its manim scene), commit
+   `uv.lock` (and any re-rendered `public/manim/`), and push. The Pages
+   workflow deploys the demo. The snapshot keeps the previous lock; `uv sync`
+   in a new project re-locks it.
 
 ## Subject layout
 
@@ -623,7 +756,8 @@ when you've installed the `[manim]` extra):
 - LaTeX is required for `MathTex`. Install [TeX Live](https://tug.org/texlive/) or BasicTeX.
 
 If you're just building/deploying a subject whose videos are already
-rendered (committed in `public/manim/`), you don't need any of these —
+rendered (committed in `public/manim/`), you don't need any of these.
+Install with `uv sync --no-default-groups` (no `manim` group), and
 `presentation-sanity build` auto-skips manim with a log line and runs the
 renderers against the existing videos. Pass `--skip-manim` explicitly if you
 want the same behavior even when manim *is* installed.
