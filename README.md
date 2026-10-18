@@ -1,114 +1,129 @@
+<a href="https://sanitism.dev"><img src="https://sanitism.dev/media/one-number-poster.jpg" alt="One number in manifest.yaml and a sentence in docs/results.md build into LaTeX, PDF, Word, HTML, slides and a blog post, each showing 12,453." width="100%"></a>
+
 # presentation-sanity
 
-Build a subject once, print it many ways. A single `manifest.yaml` declares
-shared variables (with provenance), manim scenes and Excalidraw figures, plus
-the **outputs** that render them: a Slidev deck, a VitePress blog post, or both.
-Static and deployable; manim baked in. Sibling project to
-[`document-sanity`](https://github.com/yakaboskic/document-sanity) — same
-philosophy (one source of config, multiple build targets, version-friendly).
-Both are part of [Sanitism](https://sanitism.dev): built for autists to
-communicate their work, sanely.
+**Every talk you give about a project, from one manifest: Slidev decks, VitePress blog posts and PowerPoint with playable manim scenes, sharing the same numbers, figures and animations.**
 
-Slides and a blog post are two printouts of the same material, not two
-projects. Slidev and VitePress sit on the same substrate (Vite + Vue 3 +
-markdown-it + Shiki), so one `components/` directory, one manifest and one
-`public/` folder back both: `<DataValue var="n" />` in `blog.md` reads the same
-YAML as the same tag in `slides.md`, and a manim scene renders once and embeds
-twice.
+Part of [Sanitism](https://sanitism.dev): built for autists to communicate their work, sanely. The sibling for papers and proposals is [document-sanity](https://github.com/yakaboskic/document-sanity).
 
-One level up, a repo can be a **project**: many presentations — and versions of
-them — sharing that same manifest, `public/` and components, each in its own
-folder under `presentations/` (see [Projects](#projects-many-presentations-one-repo)).
-A new version of a talk is a folder, not a branch or a copied repo.
+**See it:** [the example deck](https://presentation.sanitism.dev/example/slides/) and [its blog post](https://presentation.sanitism.dev/example/blog/), built from [presentation-sanity-template](https://github.com/yakaboskic/presentation-sanity-template).
 
-## What it does
+## Start a project
 
-Verbs take an optional **target** — a key under `outputs:` in the manifest, or
-in a project `PRESENTATION[:OUTPUT]` (e.g. `kickoff/v2:blog`).
+<img src="https://sanitism.dev/figures/two-ways-in.svg" alt="A template repo leads two ways. Use this template on GitHub gives the project a repo with history. Running uvx init gives a plain folder with no git. Both arrive at the same project." width="100%">
+
+**Just give me a folder.** No clone, no git. It needs [uv](https://docs.astral.sh/uv/) and Node 20+:
+
+```bash
+uvx --from "presentation-sanity @ git+https://github.com/yakaboskic/presentation-sanity.git@v0.4.2" \
+  presentation-sanity init my-talks --title "My talks" --first kickoff
+```
+
+```bash
+cd my-talks
+uv sync          # presentation-sanity, plus manim through the default `manim` group
+npm install      # Slidev + VitePress; links shared/
+uv run presentation-sanity dev kickoff:slides   # or kickoff:blog for the post
+```
+
+Commit the `uv.lock` that the first `uv sync` writes: the Pages workflow installs with `uv sync --locked`.
+
+**Keep it in git.** On [presentation-sanity-template](https://github.com/yakaboskic/presentation-sanity-template), click **Use this template**, clone your copy and run `python init.py`. It is a thin shim over the same `init`, so both ways give you the same project, pinned to this release, with the [agent skill](#agent-skill) installed.
+
+<details>
+<summary><b>What <code>init</code> does, flag by flag</b></summary>
+
+`init` copies the snapshot of [`presentation-sanity-template`](https://github.com/yakaboskic/presentation-sanity-template) that ships inside this release, so a project made by vX.Y.Z is the template vX.Y.Z was released with, and its dependency line is pinned back to vX.Y.Z.
+
+- **Answers** are prompted for, or given as flags: `--name` (default: the folder's name), `--title`, `--author` and `--email` (default: your git config), `--description`, `--first` (the first presentation's folder, default `kickoff`; `kickoff/v1` groups versions from the start) and `--deck-title`. `--yes` takes the defaults for anything unset. They rename the project in `pyproject.toml`, `package.json`, `package-lock.json`, `manifest.yaml` and `README.md`, and move `presentations/example/` to the first presentation.
+- **The folder** can be new, empty, or an existing one to knit into (`init .`). Everything is assembled in memory first. If any file would be replaced, `init` lists them and writes nothing; `--force` overwrites them.
+- **`--git`** adds `git init` and a first commit. Without it there's no `.git`.
+- **`uv.lock`** is left out in every mode, so the first `uv sync` locks the project against its own pin.
+- **`--from gh:owner/repo[@ref]`** starts from a GitHub tarball instead, e.g. your lab's fork of the template. No git binary needed; `GH_TOKEN` (or `GITHUB_TOKEN`) reaches a private fork. A fork's own pin is left alone.
+- **The agent skill** goes into `.claude/skills/presentation-sanity/` and `.agents/skills/presentation-sanity/` unless `--no-skills`.
+
+</details>
+
+## What goes in, what comes out
+
+<img src="https://sanitism.dev/figures/presentation-pipeline.svg" alt="What you write: manifest.yaml, presentations/kickoff/v2 with slides.md and blog.md, scenes/*.py for manim, and shared components. presentation-sanity build renders scenes and figures once. What your audience gets: a Slidev deck, a blog post, and PowerPoint with the manim videos still playing." width="100%">
+
+Slides and a blog post are two printouts of the same material, not two projects. [Slidev](https://sli.dev) and [VitePress](https://vitepress.dev) sit on the same substrate (Vite, Vue 3, markdown-it, Shiki), so one set of components, one manifest and one `public/` folder back both. `<DataValue var="num_samples" />` in a `blog.md` reads the same YAML as the same tag in a `slides.md`, and a manim scene renders once and plays in both.
+
+- **A Slidev deck** you present from the browser, or export to PDF.
+- **A VitePress blog post** that cites the same numbers in prose, with math rendered to static SVG and citations from your `.bib`.
+- **PowerPoint** with the manim videos embedded and still playing, for the conference laptop.
+
+Click any number in either output and a provenance panel slides in: its inputs, the command that made it, and the date.
+
+| Command | What runs | When |
+|---|---|---|
+| `presentation-sanity dev kickoff:slides` | `slidev` with hot reload | Write the deck (`kickoff:blog` for the post). |
+| `presentation-sanity build [TARGET]` | figures, then manim scenes (both cached), then every output | Build everything, or one presentation or output. |
+| `presentation-sanity check` | every `<DataValue>`, scene, figure and `\cite` resolved | Before you call it done. |
+| `presentation-sanity new kickoff/v2 --from kickoff/v1` | a copied presentation, with its lineage recorded | The next version of a talk. |
+| `presentation-sanity export-pptx kickoff` | PPTX with embedded, playable manim | PowerPoint that isn't just images. |
+| `presentation-sanity pages init` | `.github/workflows/pages.yml` | Publish ([below](#deploy-to-github-pages)). |
+
+<details>
+<summary><b>Every command</b></summary>
+
+Verbs take an optional **target**: a presentation id (its path under `presentations/`), optionally with an output, as in `kickoff/v2:blog`. A grouping folder selects every presentation in it.
 
 | Command | What runs | When to use |
 |---|---|---|
-| `presentation-sanity init my-talks` | Copy the bundled template into a folder, name it, install the agent skill | Start a project, no git needed ([below](#start-a-project)). |
-| `presentation-sanity list` | List the presentations (in a project) or outputs (`outputs` is an alias) | Check what exists and what's built. |
-| `presentation-sanity new kickoff/v2 --from kickoff/v1` | Copy a presentation into a new folder and record the lineage | Start a new version (project only). |
-| `presentation-sanity build` | Validate manifest → export stale figures → render stale manim scenes → render **every** output | Build everything. |
-| `presentation-sanity build blog` | Same, but only the named output(s) | Build one printout. |
-| `presentation-sanity dev blog` | `vitepress dev` with hot reload | Write the post. |
-| `presentation-sanity dev slides` | `slidev` with hot reload | Iterate on slide content. |
-| `presentation-sanity scaffold` | Regenerate `.vitepress/` from the manifest, without building | Editor tooling / inspecting the generated config. |
-| `presentation-sanity build-manim` | Render only stale manim scenes | You edited a `.py` scene file. |
+| `presentation-sanity init my-talks` | Copy the bundled template into a folder, name it, install the agent skill | Start a project, no git needed. |
+| `presentation-sanity list` | List the presentations and their outputs (`outputs` is an alias) | Check what exists and what's built. |
+| `presentation-sanity new kickoff/v2 --from kickoff/v1` | Copy a presentation into a new folder and record the lineage | Start a new version. |
+| `presentation-sanity build` | Validate the manifest, export stale figures, render stale manim scenes, render every output | Build everything. |
+| `presentation-sanity build kickoff/v2:blog` | Same, for one target | Build one printout. |
+| `presentation-sanity dev kickoff:blog` | `vitepress dev` with hot reload | Write the post. |
+| `presentation-sanity dev kickoff:slides` | `slidev` with hot reload | Iterate on slides. |
+| `presentation-sanity scaffold` | Regenerate the VitePress config without building | Editor tooling, or reading what was generated. |
+| `presentation-sanity build-manim` | Render only stale manim scenes | You edited a scene. |
 | `presentation-sanity build-figures` | Export only stale Excalidraw figures | You edited an `.excalidraw` source. |
-| `presentation-sanity preview blog` | `python http.server` on that output's dir | Smoke-test the static build (browsers won't load `file://`). |
-| `presentation-sanity export pdf` | `slidev export` | PDF output (slides only). |
+| `presentation-sanity preview` | `python http.server` on `site/` | Smoke-test the static build (browsers won't load `file://`). |
+| `presentation-sanity export pdf` | `slidev export` | A PDF of the deck. |
 | `presentation-sanity export-pptx` | PPTX with **embedded, playable** manim video | PowerPoint that isn't just images. |
-| `presentation-sanity check` | Resolve every `<DataValue>`, scene, figure and `\cite` the documents use; warn about unrendered scenes and figures, and inline components that start a line | Before you call it done. |
+| `presentation-sanity check` | Resolve every `<DataValue>`, scene, figure and `\cite`; warn about unrendered scenes and figures, and components that start a line | Before you call it done. |
 | `presentation-sanity skills` | (Re)install the agent skill into `.claude/skills/` and `.agents/skills/` | After upgrading the tool. |
-| `presentation-sanity pages init` | Write `.github/workflows/pages.yml` | Deploy to GitHub Pages ([below](#deploy-to-github-pages)). |
+| `presentation-sanity pages init` | Write `.github/workflows/pages.yml` | Deploy to GitHub Pages. |
 
-`build` degrades gracefully when manim isn't installed: it logs a clear
-message and continues to the renderers, using whatever pre-rendered videos
-already live in `public/manim/`. So a deploy environment never needs
-cairo/pango/native build tools as long as you committed the videos.
+`build` degrades gracefully without manim: it logs a clear message and uses the pre-rendered videos already in `public/manim/`. The same goes for figures: export uses [`excalidraw-brute-export-cli`](https://github.com/realazthat/excalidraw-brute-export-cli) via `npx` (first run: `npx playwright install firefox`), and `build` skips it when it isn't installed. So a deploy never needs cairo, pango or a headless browser, as long as the rendered files are committed.
 
-**Figures (Excalidraw → image).** Declare `.excalidraw` sources under
-`figures:` in the manifest; `build-figures` exports each to
-`public/figures/<key>.<format>` (content-hash cached, same as manim).
-Export uses [`excalidraw-brute-export-cli`](https://github.com/realazthat/excalidraw-brute-export-cli)
-(Playwright + Firefox) via `npx`; first run needs `npx playwright install firefox`.
-The exporter is **optional** — `build` auto-skips figure export when it isn't
-installed and uses the committed images in `public/figures/`, so deploys never
-need a headless browser. Reference a figure from either output with
-`<FigureImage figure="<key>" />`.
+</details>
 
-## Projects: many presentations, one repo
+## Projects: every talk, one repo
 
-A repo whose root holds `manifest.yaml` **and a `presentations/` directory** is a
-project. Every folder under `presentations/` that contains an output's entry
-document (`slides.md`, `blog.md`) is a presentation, and its path is its id.
-Folders without one just group presentations — that is all a version is:
+A repo whose root holds `manifest.yaml` **and a `presentations/` folder** is a project. Every folder under `presentations/` with a `slides.md` and/or a `blog.md` is a presentation, and its path is its id. Folders without one just group presentations, and that is all a version is:
 
 ```
-pigean/
+my-talks/
 ├── manifest.yaml                 # SHARED: variables, scenes, figures, bibliography, math,
-│                                 #   plus defaults for every presentation's outputs
+│                                 #   and defaults for every presentation's outputs
 ├── public/  scenes/  refs.bib    # shared assets and sources
-├── shared/                       # shared Vue layer, a local Slidev addon (below)
+├── shared/                       # the shared Vue layer, a local Slidev addon
 └── presentations/
-    ├── decode-pigean/            # grouping folder
-    │   ├── cfde-2026/slides.md   #   id decode-pigean/cfde-2026
-    │   └── eurac-2026/           #   id decode-pigean/eurac-2026
+    ├── kickoff/                  # a grouping folder
+    │   ├── v1/slides.md          #   id kickoff/v1
+    │   └── v2/                   #   id kickoff/v2
     │       ├── slides.md
-    │       ├── manifest.yaml     #   optional: metadata + output overrides
-    │       └── components/X.vue  #   optional: overrides shared/components/X.vue
-    └── ashg-2026/slides.md
+    │       ├── blog.md
+    │       ├── manifest.yaml     #   optional: metadata and output overrides
+    │       └── components/X.vue  #   optional: replaces shared/components/X.vue here
+    └── lab-meeting/slides.md     # id lab-meeting
 ```
 
-- **Outputs** come from the files a presentation has: `slides` for `slides.md`,
-  `blog` for `blog.md`. The project's `outputs:` are defaults for all of them
-  (`out:` is not allowed there); each builds to `site/<id>/<output>/`, and
-  `site/index.html` — refreshed on every build — lists them grouped by folder.
-- **A presentation's `manifest.yaml`** may only hold `metadata` (title, date,
-  venue, authors, `from`) and `outputs` overrides (deep-merged; `blog: false`
-  opts out). Variables, scenes, figures, bibliography and math are project-wide,
-  so they never fork: when a number changes, add a new key and point the new
-  version at it.
-- **Targets**: `build` with no target builds everything (or, inside a
-  presentation's folder, that presentation). A grouping folder selects every
-  presentation in it (`build decode-pigean`), and paths work too.
-- **`new <id> [--from <id>] [--title T]`** creates a presentation, or copies one
-  (skipping `exports/` and Slidev's scratch state), retitles its headmatter and
-  records `from:` in its manifest.
-- **`--base`** is the deploy prefix for all of `site/`: decks build with a
-  relative `./`, blogs with `<prefix><id>/<output>/`.
-- A repo **without** `presentations/` is a single subject and builds exactly as
-  before.
+- **Outputs** come from the files a presentation has: `slides` for `slides.md`, `blog` for `blog.md`. Each builds to `site/<id>/<output>/`, and `site/index.html`, refreshed on every build, lists them grouped by folder.
+- **A presentation's `manifest.yaml`** may only hold `metadata` (title, date, venue, authors, `from`) and `outputs` overrides (`blog: false` opts out). Variables, scenes, figures, bibliography and math are project-wide, so they never fork: when a number changes, add a new key and point the new version at it.
+- **`new <id> [--from <id>] [--title T]`** creates a presentation, or copies one (skipping exports and Slidev's scratch state), retitles it, and records `from:` in its manifest.
+- **`--base`** is the deploy prefix for all of `site/`: decks build with a relative `./`, blogs with `<prefix><id>/<output>/`.
+- A repo **without** `presentations/` is a single subject: one `slides.md` and/or `blog.md` at the root, building to `site/`.
 
-### The shared layer is a Slidev addon
+<details>
+<summary><b>Why the shared layer is a Slidev addon</b></summary>
 
-Slidev takes components, layouts, global layers, styles and `vite.config.ts`
-from the folder of the deck it builds, so a deck at `presentations/<id>/` sees
-nothing at the project root. The shared files therefore live in `shared/`,
-packaged as a local addon and enabled once for every deck:
+Slidev takes components, layouts, global layers, styles and `vite.config.ts` from the folder of the deck it builds, so a deck at `presentations/<id>/` sees nothing at the project root. The shared files therefore live in `shared/`, packaged as a local addon and enabled once for every deck:
 
 ```jsonc
 // package.json
@@ -116,104 +131,94 @@ packaged as a local addon and enabled once for every deck:
 "slidev": { "addons": ["psanity-shared"] }
 ```
 
-`shared/package.json` (just a `name`) is required. `shared/vite.config.ts` sets an
-**absolute** `publicDir` (the project's `public/` — a relative one would resolve
-against the deck's folder), registers the YAML plugin, defines `@project` /
-`@shared` aliases for depth-independent imports, and sets
-`slidev.components.allowOverrides` so a presentation's `components/X.vue` wins
-over the shared one. A package name is used rather than a relative path because
-Slidev resolves relative addon paths against the deck's *parent* folder.
+`shared/package.json` (just a `name`) is required. `shared/vite.config.ts` sets an **absolute** `publicDir` (the project's `public/`; a relative one would resolve against the deck's folder), registers the YAML plugin, defines `@project` / `@shared` aliases for depth-independent imports, and sets `slidev.components.allowOverrides` so a presentation's `components/X.vue` wins over the shared one. A package name is used rather than a relative path because Slidev resolves relative addon paths against the deck's *parent* folder.
 
-For blogs, the generated VitePress config does the equivalent: `srcDir` stays the
-project root (VitePress copies `<srcDir>/public` verbatim), the site is narrowed
-to one presentation with `srcExclude` + `rewrites`, the same two aliases are
-defined, and the theme registers `shared/components` then the presentation's
-own `components`. Each blog's config is written to
-`.cache/vitepress/<id>/.vitepress/`, so two blogs can run `dev` at once.
+For blogs, the generated VitePress config does the equivalent: `srcDir` stays the project root (VitePress copies `<srcDir>/public` verbatim), the site is narrowed to one presentation with `srcExclude` + `rewrites`, the same two aliases are defined, and the theme registers `shared/components` then the presentation's own `components`. Each blog's config is written to `.cache/vitepress/<id>/.vitepress/`, so two blogs can run `dev` at once.
 
-`build`/`dev` stop early with "run `npm install`" when the addon isn't linked
-into `node_modules`, and warn when a project still has `components/` or
-`layouts/` at its root, where decks can't see them.
+`build` and `dev` stop early with "run `npm install`" when the addon isn't linked into `node_modules`, and warn when a project still has `components/` or `layouts/` at its root, where decks can't see them.
 
-## Outputs
+</details>
+
+## The manifest
+
+The template's, shortened, plus a `figures:` entry to show the shape of an Excalidraw source:
 
 ```yaml
-outputs:
-  blog:
-    engine: vitepress      # inferred for keys blog/post/article
-    entry: blog.md         # rewritten to `/` in the built site
-    out: site/blog
-  slides:
-    engine: slidev         # inferred for keys slides/deck
-    entry: slides.md
-    out: site/slides
-    theme: seriph
+metadata:
+  title: "Presentation Sanity Demo"
+  description: "A single source of truth for slides and writing."
+  authors:
+    - { name: "Your Name", email: "you@example.com" }
+
+outputs:                    # defaults for every presentation's outputs
+  blog: {}                  # nav, sidebar, socialLinks, themeConfig, … are forwarded to VitePress
+  slides: {}                # a deck's look lives in its slides.md headmatter
+
+variables:
+  num_samples:
+    value: 12453
+    format: ","             # Python-style spec: , .2e .3f .1%
+    description: "Participants after QC filtering"
+    source: "data/results.csv"        # or `data:` for a list of inputs
+    command: "python scripts/qc.py data/raw/ --out data/results.csv"
+    updated: "2026-09-30"
+  num_samples_2026q1:       # March's number keeps its own key, so March's talk keeps showing it
+    value: 11982
+    format: ","
+
+scenes:
+  one_source:
+    source: "scenes/one_source.py"
+    class: "OneSource"
+    quality: "h"            # l | m | h | p | k
+    format: "webm"
+
+figures:
+  pipeline:
+    source: "excalidraw/pipeline.excalidraw"
+    format: "svg"           # svg | png
+
+bibliography:
+  sources: ["refs.bib"]
+  style: numeric            # numeric → [1] | author-year → (Smith et al., 2020)
 ```
 
-Delete an entry to stop building that format; add one to start. Unknown keys in
-an output are forwarded to the engine (VitePress: `nav`, `sidebar`,
-`socialLinks`, `head`, `markdown`, `themeConfig`, `exclude`, `base`).
+Provenance fields (`description`, `source`, `data`, `command`, `updated`) are **informational**: they appear in the provenance panel but are never executed, which keeps the build hermetic.
 
-A manifest with no `outputs:` block is treated as a lone Slidev deck
-(`slides.md` → `site/`), so decks written before this existed keep building to
-the same place.
+## Writing
 
-**One VitePress output per subject.** Extra markdown files next to the entry
-become extra *pages of the same site* — that's the model, rather than two
-sites. Every other output's `entry` lands in `srcExclude` automatically, so
-`slides.md` never becomes a blog page.
+**A number with its provenance**, identical in both outputs:
 
-### The generated `.vitepress/`
+```markdown
+We analyzed <DataValue var="num_samples" /> participants after QC.
+```
 
-`presentation-sanity` writes `.vitepress/config.mts` and
-`.vitepress/theme/index.ts` from the manifest before every `dev`/`build` (in a
-project, under `.cache/vitepress/<id>/`). The directory is generated,
-gitignored, and never hand-edited. The theme:
+**A manim scene, two ways.** Full-screen in the deck:
 
-- glob-registers every `components/*.vue` globally under its filename — the
-  same convention Slidev uses, so components work in markdown with no imports;
-- mounts `ProvenancePanel` in the `layout-bottom` slot — the VitePress
-  equivalent of Slidev's `global-bottom.vue` singleton;
-- imports `blog.css` when present.
+```markdown
+---
+layout: manim
+scene: one_source
+---
+```
 
-The generated config sets **`vite.configFile: false`**, which is load-bearing:
-a subject root also carries a `vite.config.ts` for Slidev, and merging it in
-would apply `@modyfi/vite-plugin-yaml` a *second* time — the double pass
-re-parses the emitted JS as YAML and hands every component a string instead of
-the manifest — as well as Slidev's `base: './'`, which VitePress's router
-cannot use.
+Inline in the post, playing when scrolled into view and pausing when scrolled out:
 
-Optional Node packages are detected at scaffold time, so a subject without them
-still builds (with a note): `markdown-it-mathjax3` enables `$math$`,
-`@modyfi/vite-plugin-yaml` is what lets `<DataValue>` read the manifest.
+```markdown
+The idea in one picture: <ManimFigure scene="one_source" caption="One source, every printout." />
+```
 
-`presentation-sanity scaffold` regenerates the directory without building — use
-it to read exactly what was produced.
+Both read `public/manim/one_source.webm` plus the last-frame poster `build-manim` extracts, so the finished frame shows wherever video can't play (first paint, PDF and PPTX export, print).
 
-### Theming levers
+> [!TIP]
+> Keep a component tag off the *start* of a line. markdown-it reads a line beginning with `<Tag` as an HTML block and closes the paragraph around it; `check` warns when it finds one.
 
-Because there is no page file to edit, theming happens through four levers:
+**Figures** from Excalidraw: `<FigureImage figure="pipeline" />`. **Citations:** `\cite{key}` and `\bibliography`, [below](#citations).
 
-| Lever | Where | Reaches |
-|---|---|---|
-| `outputs.<key>:` keys | `manifest.yaml` | `nav`, `sidebar`, `socialLinks`, `outline`, `footer`, `head`, `markdown`, `base`, `title`, `description`, `exclude`, `lastUpdated` |
-| `themeConfig:` | `manifest.yaml` | any other default-theme option — `logo`, `aside`, `search`, `editLink`, `docFooter`, … |
-| `vitepress:` | `manifest.yaml` | any other top-level VitePress option — `appearance`, `lang`, `titleTemplate`, `sitemap`, … . `outDir`, `rewrites` and `cacheDir` stay owned by the build orchestrator |
-| `blog.css` | subject root | imported **last** into the generated theme, so it overrides VitePress's CSS variables *and* the built-in citation styles |
+<details>
+<summary><b>Math</b></summary>
 
-Per-page frontmatter (`layout: doc`/`page`/`home`, `aside`, `sidebar`,
-`outline`, `pageClass`) and anything dropped into `components/` work as usual.
-To go further, copy the generated directory elsewhere and run VitePress
-yourself.
-
-## Math
-
-The blog renders LaTeX to **static SVG at build time** (MathJax via
-`markdown-it-mathjax3`, with MathJax's full package set). No client-side math
-runtime, no flash of unstyled TeX, and it prints correctly.
-
-`$…$` and `$$…$$` work as expected, and display environments can be written
-bare — the way you would in a `.tex` file:
+The blog renders LaTeX to **static SVG at build time** (MathJax via `markdown-it-mathjax3`, full package set): no client-side math runtime, no flash of unstyled TeX, and it prints correctly. `$…$` and `$$…$$` work as expected, and display environments can be written bare, the way you would in a `.tex` file:
 
 ```markdown
 \begin{align}
@@ -222,23 +227,13 @@ h^2 &= \frac{\sigma^2_A}{\sigma^2_P} \\
 \end{align}
 ```
 
-`markdown-it-mathjax3` only recognises `$` delimiters, so a bare environment
-would otherwise fall through to the paragraph rule and render as literal text
-with its `\\` row breaks eaten. `presentation-sanity` adds a markdown-it block
-rule that consumes `\begin{env}…\end{env}` and hands it to the same renderer, so
-it behaves exactly as if it had been fenced in `$$`.
-
-Environments not on the list (`\begin{itemize}`, say) stay literal, and an
-unterminated `\begin{…}` falls back to a paragraph rather than swallowing the
-rest of the document. Nested constructs like `cases` and `pmatrix` still need
-`$$` fencing — they are not block-level environments.
+`align`, `equation`, `gather`, `multline` and friends are recognised at block level, starred variants included. Environments not on the list stay literal, an unterminated `\begin{…}` falls back to a paragraph, and nested constructs like `cases` and `pmatrix` still need `$$` fencing.
 
 ```yaml
 math:
   macros:
     Var: "\\operatorname{Var}"
     RR: "\\mathbb{R}"
-    given: "\\mid"
     norm: ["\\left\\lVert #1 \\right\\rVert", 1]   # [expansion, arg count]
   tags: none            # none | ams | all
   environments: true    # or false, or an explicit list of env names
@@ -247,27 +242,15 @@ math:
   svg: {}               # raw `svg` output passthrough
 ```
 
-**Define macros here, not with an in-document `\newcommand`.** The renderer
-keeps one TeX instance for the whole build, so an in-document definition leaks
-into every later block *and every later page*, and whether it resolves depends
-on source order. Declared in the manifest they are deterministic.
+**Define macros here, not with an in-document `\newcommand`.** The renderer keeps one TeX instance for the whole build, so an in-document definition leaks into every later block and page, and whether it resolves depends on source order. `tags: ams` numbers display equations and enables `\label`/`\eqref`; the counter is shared across the build, so with several pages prefer an explicit `\tag{…}` or reset with `\setcounter{equation}{0}`.
 
-`tags: ams` numbers display equations and enables `\label`/`\eqref`. The same
-shared-instance behaviour applies to the counter: numbering runs across the
-whole build and its starting point depends on page processing order. That is
-fine for a single-page post; with several pages prefer an explicit `\tag{…}`
-(stable and order-independent) or reset a page with
-`\setcounter{equation}{0}`.
+The deck renders math with **KaTeX** (Slidev's built-in), so `math.macros` reaches the blog only; configure the deck's macros in Slidev's `setup/katex.ts` if you need them in both.
 
-> The deck renders math with **KaTeX** (Slidev's built-in), not MathJax, so
-> `math.macros` currently reaches the blog only. Configure the deck's macros in
-> Slidev's `setup/katex.ts` if you need them in both.
+</details>
 
-## Citations
+### Citations
 
-LaTeX-shaped citing without a LaTeX toolchain. Name `.bib` sources in the
-manifest, cite with `\cite{key}`, and mark the reference list with
-`\bibliography`:
+LaTeX-shaped citing without a LaTeX toolchain:
 
 ```yaml
 bibliography:
@@ -279,132 +262,115 @@ bibliography:
   link: true                # render the DOI / URL as a link
 ```
 
-```markdown
-Heritability is routinely misread \cite{visscher2008}. The framing goes back
-further \cite{falconer1996,lewontin1974}. \citet{lewontin1974} argued the
-analysis of variance cannot recover the analysis of causes, at
-\cite[pp. 401--403]{lewontin1974}.
-
-\bibliography
-```
-
 | Command | numeric | author-year |
 |---|---|---|
 | `\cite{k}`, `\citep{k}` | `[1]` | `(Smith et al., 2020)` |
 | `\citet{k}` | `Smith et al. [1]` | `Smith et al. (2020)` |
 | `\cite{a,b}` | `[1, 2]` | `(Doe, 1996; Smith, 2020)` |
 | `\cite[p. 12]{k}` | `[1, p. 12]` | `(Smith et al., 2020, p. 12)` |
-| `\nocite{k}` | — (listed, not cited inline) | — |
+| `\nocite{k}` | listed, not cited inline | |
 | `\bibliography`, `\printbibliography` | the reference list | |
 
-Parsing and formatting happen at build time on the Python side; the generated
-VitePress config carries the finished HTML for each entry, so the published
-page ships plain anchors and **no citation runtime** — the same bargain the
-math rendering makes. Every citation links to its entry and carries the full
-reference as a hover tooltip.
+Parsing and formatting happen at build time, so the page ships plain anchors and no citation runtime. Every citation links to its entry and shows the full reference on hover, and numbering is resolved in a second pass, so `sort: author` renumbers the markers and the list together. The BibTeX parser is dependency-free and handles `@string` macros and `#` concatenation, brace-protected capitals, accents (`M{\"u}ller` → Müller), dashes, `and others`, and inline math in titles. An unknown key renders a visible `[?key]` and logs a warning. Citations inside code spans and math are left alone. Like `math.macros`, citations currently reach the blog only, and editing a `.bib` needs a `dev` restart.
 
-Numbering is resolved in a second pass over the parsed document, so
-`style: numeric` with `sort: author` renumbers the in-text markers *and* the
-list together rather than only reordering the list.
+<details>
+<summary><b>The generated VitePress config, and theming the blog</b></summary>
 
-The BibTeX parser is dependency-free and handles the things real `.bib` files
-contain: `@string` macros and `#` concatenation, `"…"` and `{…}` values,
-case-insensitive fields, brace-protected capitalisation (`{DNA}`), LaTeX
-accents (`M{\"u}ller` → Müller), `--`/`---` dashes, `and others` → et al., and
-inline math in titles (`$\alpha$` → α). `@comment` and `@preamble` are skipped.
+`presentation-sanity` writes `.vitepress/config.mts` and `.vitepress/theme/index.ts` from the manifest before every `dev` and `build` (in a project, under `.cache/vitepress/<id>/`). It is generated, gitignored and never hand-edited. The theme glob-registers every component under its filename (the Slidev convention, so components work in Markdown with no imports), mounts `ProvenancePanel` in the `layout-bottom` slot, and imports `blog.css` when present.
 
-A `\cite{}` of an unknown key renders a visible `[?key]` marker and logs a
-build warning rather than failing or silently vanishing — the same treatment
-`<DataValue>` gives a missing variable. Citation commands inside code spans and
-math are left alone.
+The config sets **`vite.configFile: false`**, which is load-bearing: the project also carries a `vite.config.ts` for Slidev, and merging it in would apply `@modyfi/vite-plugin-yaml` a second time (handing every component a string instead of the manifest) as well as Slidev's `base: './'`, which VitePress's router can't use. Optional Node packages are detected at scaffold time: `markdown-it-mathjax3` enables math, `@modyfi/vite-plugin-yaml` lets `<DataValue>` read the manifest. `presentation-sanity scaffold` regenerates the directory without building.
 
-> Two caveats. The generated config is written once when `dev` starts, so
-> editing a `.bib` file needs a dev-server restart (editing the document
-> itself hot-reloads normally). And like `math.macros`, this currently reaches
-> the **blog only** — the deck's markdown pipeline is Slidev's.
+| Lever | Where | Reaches |
+|---|---|---|
+| `outputs.<key>:` keys | `manifest.yaml` | `nav`, `sidebar`, `socialLinks`, `outline`, `footer`, `head`, `markdown`, `base`, `title`, `description`, `exclude`, `lastUpdated` |
+| `themeConfig:` | `manifest.yaml` | any other default-theme option: `logo`, `aside`, `search`, `editLink`, `docFooter`, … |
+| `vitepress:` | `manifest.yaml` | any other top-level VitePress option: `appearance`, `lang`, `titleTemplate`, `sitemap`, … (`outDir`, `rewrites` and `cacheDir` stay owned by the build) |
+| `blog.css` | `shared/`, or a presentation's folder | imported **last**, so it overrides VitePress's CSS variables and the built-in citation styles |
 
-## How it fits together
+**One VitePress site per presentation.** Extra Markdown files next to `blog.md` become extra pages of the same site, and every other output's entry is excluded automatically, so `slides.md` never becomes a page.
 
-```
-                     SHARED, RENDERED ONCE              PER-OUTPUT
-manifest.yaml ─┐
-scenes/*.py    │   ┌─ validate manifest
-components/    ├──►├─ export stale figures  → public/figures/<key>.svg ─┐
-composables/   │   └─ render stale scenes   → public/manim/<key>.webm  ─┤
-public/        ┘      (both content-hash cached)                        │
-                                                                        ▼
-blog.md   ──────────────────────────────────►  npx vitepress build → site/blog/
-slides.md ──────────────────────────────────►  npx slidev build    → site/slides/
-                                                                   → site/index.html
-```
+</details>
 
-> Output dirs default to **`site/<key>/`** (not `dist`/`build`/`out`, which many
-> static hosts and deploy tools auto-ignore). Set `out:` per output, or override
-> a single target with `build <target> --out <dir>`. A full build of more than
-> one output also writes a small `site/index.html` linking each printout.
+## Deploy to GitHub Pages
 
-- **`manifest.yaml`** — the subject's single source of config: variables (with
-  provenance metadata), manim scenes, figures, and the outputs that print them.
-- **Slidev** renders the deck, **VitePress** renders the blog — both Vue +
-  markdown, both static HTML output.
-- **`<DataValue>`** reads `manifest.yaml` directly via
-  `@modyfi/vite-plugin-yaml` — no Python intermediate for variables, in either
-  engine.
-- **Manim scenes** are pre-rendered to `.webm` (plus a last-frame poster) and
-  embedded full-screen by the Slidev `manim` layout, or inline by
-  `<ManimFigure scene="…" />` in the blog.
-
-Variable provenance fields (`description`, `source`, `command`, `updated`)
-are **informational** — they show up in `<DataValue>` tooltips but are not
-executed at build time. Keeping the build hermetic on purpose.
-
-## Start a project
-
-One command, no clone and no git:
+> [!WARNING]
+> A GitHub Pages site is **public**, even when the repository is private.
 
 ```bash
-uvx --from "presentation-sanity @ git+https://github.com/yakaboskic/presentation-sanity.git@v0.4.2" \
-  presentation-sanity init my-talks --title "My talks" --first kickoff
-cd my-talks
-uv sync          # presentation-sanity, plus manim through the default `manim` group
-npm install      # Slidev + VitePress; links shared/
-uv run presentation-sanity dev kickoff:slides   # or kickoff:blog for the post
+uv run presentation-sanity pages init      # → .github/workflows/pages.yml
 ```
 
-`init` doesn't copy the template's `uv.lock`, so the first `uv sync` locks
-the new project against its own pin. Commit that `uv.lock`: the Pages
-workflow installs with `uv sync --locked`.
+Then turn Pages on (Settings → Pages → Source: **GitHub Actions**, or `gh api -X POST repos/OWNER/REPO/pages -f build_type=workflow`) and push to `main`. On each push the workflow asks `actions/configure-pages` for the site's base path (`/<repo>` for a project site, empty for a custom domain), runs `uv sync --locked --no-default-groups` and `npm ci`, builds with `--skip-manim --skip-figures --base "<base path>/"`, and deploys `site/`. The [template's demo](https://presentation.sanitism.dev/) is built exactly this way.
 
-`init` copies the snapshot of
-[`presentation-sanity-template`](https://github.com/yakaboskic/presentation-sanity-template)
-that ships inside this release, so a project made by vX.Y.Z is the template
-vX.Y.Z was released with, and its dependency line is pinned back to vX.Y.Z.
+- **The runner never renders manim.** Rendering needs cairo, pango, ffmpeg and LaTeX, which is slow and fragile on every push. So the workflow installs without the `manim` group and deploys the videos committed in `public/manim/`: the render you looked at, not a fresh one that might differ. Figures work the same way.
+- **`pages init` checks first.** It refuses a project whose `[project]` dependencies still say `presentation-sanity[manim] @ …` (and prints the move into a `manim` group), and notes a missing `uv.lock` or `package-lock.json`, or scenes and figures that aren't rendered or that `.gitignore` would keep out.
+- **Options:** `--branch` (default `main`), `--only-repo OWNER/NAME` (forks and template copies skip the job), `--force` to regenerate.
+- **Any static host works.** Decks use hash routing and blogs build real `.html` routes, so `site/` works on S3, R2 or Netlify with no rewrite rules. Slidev takes a relative base and works under any prefix; VitePress needs an absolute one, which `--base` sets for every blog: `presentation-sanity build --base /my-talks/` puts kickoff/v2's post at `/my-talks/kickoff/v2/blog/`.
 
-- **Answers** are prompted for, or given as flags: `--name` (default: the
-  folder's name), `--title`, `--author` and `--email` (default: your git
-  config), `--description`, `--first` (the first presentation's folder,
-  default `kickoff`; `kickoff/v1` groups versions from the start) and
-  `--deck-title`. `--yes` takes the defaults for anything unset. They rename
-  the project in `pyproject.toml`, `package.json`, `package-lock.json`,
-  `manifest.yaml` and `README.md`, and move `presentations/example/` to the
-  first presentation.
-- **The folder** can be new, empty, or an existing one to knit into (`init
-  .`). Everything is assembled in memory first. If any file would be
-  replaced, `init` lists them and writes nothing; `--force` overwrites them.
-- **`--git`** adds `git init` and a first commit. Without it there's no `.git`.
-- **`--from gh:owner/repo[@ref]`** starts from a GitHub tarball instead, e.g.
-  your lab's fork of the template. No git binary needed; `GH_TOKEN` (or
-  `GITHUB_TOKEN`) reaches a private fork. A fork's own pin is left alone.
-- **The agent skill** goes into `.claude/skills/presentation-sanity/` and
-  `.agents/skills/presentation-sanity/` unless `--no-skills` ([below](#agent-skill)).
+## Agent skill
 
-On GitHub, **"Use this template"** on presentation-sanity-template works too:
-its `init.py` is a thin shim that runs `presentation-sanity init --in-place`
-with the pinned version, so both ways share one code path.
+`init` installs a skill for coding agents into `.claude/skills/presentation-sanity/` (Claude Code: `/presentation-sanity [mode]`) and `.agents/skills/presentation-sanity/` (other agents). Ask for the work instead of looking up flags:
 
-### The subject repo's dependencies
+| Ask | What happens |
+|---|---|
+| `/presentation-sanity new` | The next version of a talk, as a new folder. |
+| `/presentation-sanity slides` or `blog` | Write the deck or the post, with numbers from the manifest. |
+| `/presentation-sanity manim` | A scene, registered, rendered and placed. |
+| `/presentation-sanity deploy` | GitHub Pages, after confirming the work is meant to be public. |
 
-**`pyproject.toml`**, as the template writes it:
+The other modes: `init`, `figures`, `variables`, `cite`, `export` and `check`.
+
+- **It explains; the CLI does.** Every mode works through commands rather than having the agent write generated files.
+- **It finds the project** from its sentinel files (`manifest.yaml` next to `presentations/`, or a `package.json` depending on `psanity-shared`).
+- **It checks the version.** When `presentation-sanity --version` differs from the version it was written for, it trusts `--help` over its own text.
+
+The wheel carries the skill; `presentation-sanity skills [--force]` refreshes it after an upgrade. The repo is also a Claude Code plugin (`.claude-plugin/plugin.json`).
+
+## System dependencies
+
+Only for **rendering manim scenes locally**:
+
+- macOS: `brew install ffmpeg cairo pango`
+- Linux: `apt install ffmpeg libcairo2-dev libpango1.0-dev`
+- LaTeX for `MathTex`: [TeX Live](https://tug.org/texlive/) or BasicTeX.
+
+To build against videos already committed in `public/manim/`, you need none of these: install with `uv sync --no-default-groups`, and `build` skips manim with a log line. `--skip-manim` does the same when manim *is* installed.
+
+## House rules
+
+```yaml
+# sanitism.yaml
+principles:
+  one_manifest: everything else is generated, never hand-edited
+  every_number_has_a_source: the file, command and date travel with the value
+  versions_are_folders: not branches, and not final_v3_REAL.docx
+  one_repo_per_obsession: papers, proposals and talks share figures and numbers
+  same_input_same_output: a rebuild never surprises your co-authors
+```
+
+## Install the tool directly
+
+For local development on the tool itself:
+
+```bash
+git clone https://github.com/yakaboskic/presentation-sanity
+cd presentation-sanity
+uv sync
+uv run presentation-sanity --help
+uv run pytest
+```
+
+To iterate on the tool against a real project, clone [`presentation-sanity-template`](https://github.com/yakaboskic/presentation-sanity-template) alongside this repo and point its dependency at the local checkout:
+
+```toml
+[tool.uv.sources]
+presentation-sanity = { path = "../presentation-sanity", editable = true }
+```
+
+<details>
+<summary><b>The project's dependencies, as the template writes them</b></summary>
+
+**`pyproject.toml`:**
 
 ```toml
 [project]
@@ -433,17 +399,12 @@ build-backend = "hatchling.build"
 allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
-bypass-selection = true        # the deck repo has no importable Python
+bypass-selection = true        # the project has no importable Python
 ```
 
-The group's `presentation-sanity[manim]` has no URL: uv takes it from the
-pinned line, so an upgrade is still one tag. Keeping manim out of the main
-dependency line is what lets a deploy runner, or a co-author without the
-native tools, install with `--no-default-groups` and build against the
-committed videos in `public/manim/`.
+The group's `presentation-sanity[manim]` has no URL: uv takes it from the pinned line, so an upgrade is still one tag. Keeping manim out of the main dependency line is what lets a deploy runner, or a co-author without the native tools, install with `--no-default-groups`.
 
-**`package.json`**: install only the engines you actually use. A blog-only
-repo can drop the Slidev dependencies entirely:
+**`package.json`:** install only the engines you use; a blog-only project can drop the Slidev dependencies.
 
 ```json
 {
@@ -464,134 +425,7 @@ repo can drop the Slidev dependencies entirely:
 }
 ```
 
-Then:
-
-```bash
-uv sync                                   # presentation-sanity, with manim
-npm install                               # the JS engines
-uv run presentation-sanity list           # what this project holds
-uv run presentation-sanity check          # every reference resolves?
-uv run presentation-sanity build          # full pipeline → site/
-uv run presentation-sanity preview        # http://localhost:8000
-```
-
-## Agent skill
-
-`skills/presentation-sanity/` is a skill for coding agents: a router
-(`SKILL.md`, invoked as `/presentation-sanity [mode]` in Claude Code) and one
-file per mode under `modes/`: `_shared` (the ground rules), `init`, `new`,
-`slides`, `blog`, `manim`, `figures`, `variables`, `cite`, `export`, `check`
-and `deploy`.
-
-- **It explains; the CLI does.** Every mode works through commands (`new`,
-  `check`, `build`, `pages init`, …) rather than having the agent write
-  generated files. When a step is deterministic, it belongs in the CLI.
-- **It finds the project** from its sentinel files (`manifest.yaml` next to
-  `presentations/`, or a `package.json` depending on `psanity-shared`) and
-  resolves every path from there.
-- **It checks the version.** It runs `presentation-sanity --version`, and
-  when that differs from the version the skill was written for, it trusts
-  `--help` over its own text.
-- **It asks before anything public.** The deploy mode warns that a Pages site
-  is public even from a private repository, and waits for a yes.
-
-The wheel carries the skill. `init` installs it into new projects, and
-`presentation-sanity skills [--force]` installs or refreshes it in an existing
-one. Run that after upgrading, so the skill matches the tool. The repo is also
-a Claude Code plugin (`.claude-plugin/plugin.json`).
-
-## Deploy to GitHub Pages
-
-> A GitHub Pages site is **public**, even when the repository is private.
-
-```bash
-uv run presentation-sanity pages init      # → .github/workflows/pages.yml
-```
-
-Then turn Pages on (Settings → Pages → Source: **GitHub Actions**, or
-`gh api -X POST repos/OWNER/REPO/pages -f build_type=workflow`) and push to
-`main`. On each push the workflow:
-
-1. checks out the repo and asks `actions/configure-pages` for the site's base
-   path (`/<repo>` for a project site, empty for a custom domain or a
-   `<user>.github.io` repo);
-2. sets up uv and Node, then runs `uv sync --locked --no-default-groups` and
-   `npm ci`;
-3. runs `presentation-sanity build --skip-manim --skip-figures --base
-   "<base path>/"` (VitePress needs the absolute base);
-4. uploads `site/` and deploys it.
-
-**Why the runner never renders manim.** Rendering needs cairo, pango, ffmpeg
-and LaTeX, and with manim on the main dependency line a plain `uv sync` would
-compile the cairo bindings before anything else ran. Installing those on every
-push is slow and fragile (MathTex wants a TeX distribution). So the workflow
-installs without the `manim` group and deploys the videos committed in
-`public/manim/`: the render you looked at, not a fresh one that might differ.
-Figures work the same way.
-
-`pages init` checks the project can deploy that way before it writes anything:
-
-- it **refuses** a project whose `[project]` dependencies still say
-  `presentation-sanity[manim] @ …`, and prints the move into a `manim` group;
-- it **notes** a missing `uv.lock` or `package-lock.json` (the workflow
-  installs from both), and declared scenes or figures that aren't rendered
-  yet or that `.gitignore` would keep out of the repo.
-
-Options: `--branch` (default `main`), `--only-repo OWNER/NAME` (forks and
-template copies skip the job; the template uses this for its own demo at
-<https://yakaboskic.github.io/presentation-sanity-template/>), `--force` to
-regenerate. Action versions at the time of writing: `actions/checkout@v7`,
-`configure-pages@v6`, `setup-node@v7`, `upload-pages-artifact@v5`,
-`deploy-pages@v5`, and `astral-sh/setup-uv@v10.3.0` (setup-uv publishes no
-floating major tag).
-
-## Subdirectory deploys
-
-The two engines differ here, and it matters:
-
-- **Slidev** accepts a *relative* base. `vite.config.ts` ships with
-  `base: './'`, so the built deck works unchanged at any URL prefix
-  (`https://host/preview/abc/`, `https://host/talks/2026/`).
-- **VitePress** does SSR and route matching, so it needs an *absolute* prefix.
-  `presentation-sanity` coerces a relative value to `/` rather than emitting a
-  site that 404s its own routes.
-
-```bash
-presentation-sanity build slides --base ./              # relative (Slidev default)
-presentation-sanity build blog   --base /talks/2026/    # absolute (VitePress)
-```
-
-Or set `base:` per output in the manifest. `<ManimFigure>`, `<FigureImage>` and
-the Slidev `manim` layout all read `import.meta.env.BASE_URL`, so asset URLs
-follow whichever base is in force — no extra config needed.
-
-In a **project**, `--base` names the prefix the whole `site/` is served from,
-and each output's base is derived from it: decks get `./`, blogs get
-`<prefix><id>/<output>/`.
-
-```bash
-presentation-sanity build --base /pigean/    # blog of kickoff/v2 → /pigean/kickoff/v2/blog/
-```
-
-## Install the tool directly
-
-For local development on the tool itself:
-
-```bash
-git clone https://github.com/yakaboskic/presentation-sanity
-cd presentation-sanity
-uv sync
-uv run presentation-sanity --help
-```
-
-To iterate on the tool against a real subject, clone
-[`presentation-sanity-template`](https://github.com/yakaboskic/presentation-sanity-template)
-alongside this repo and point its dependency at the local checkout:
-
-```toml
-[tool.uv.sources]
-presentation-sanity = { path = "../presentation-sanity", editable = true }
-```
+</details>
 
 ### Releasing
 
@@ -624,156 +458,10 @@ only through a release. Each release also carries a snapshot of the template
    workflow deploys the demo. The snapshot has no lock (`init` would skip
    it anyway): a new project's first `uv sync` writes its own.
 
-## Subject layout
+## Lineage
 
-```
-my-subject/
-├── pyproject.toml          # declares presentation-sanity dep
-├── package.json            # Slidev and/or VitePress deps
-├── manifest.yaml           # outputs + variables + scenes + figures
-│
-├── blog.md                 # ← VitePress entry (served at /)
-├── slides.md               # ← Slidev entry
-│
-├── components/             # SHARED, auto-registered globally in both engines
-│   ├── DataValue.vue       #   provenance-aware variable rendering
-│   ├── ProvenancePanel.vue #   the slide-in provenance graph (singleton)
-│   ├── ManimFigure.vue     #   a manim scene as an inline blog figure
-│   └── FigureImage.vue     #   an exported Excalidraw figure
-├── composables/            # SHARED
-├── layouts/manim.vue       # Slidev-only: full-screen manim slide
-├── scenes/intro.py         # SHARED manim sources
-├── public/                 # SHARED static assets — paths follow Vite's base
-│   ├── manim/              #   rendered videos + posters, committed with source
-│   └── figures/            #   exported Excalidraw images
-│
-├── style.css               # Slidev-only globals (auto-loaded by Slidev)
-├── blog.css                # VitePress-only styles (imported into the theme)
-├── vite.config.ts          # SLIDEV ONLY — VitePress builds with configFile:false
-│
-├── .vitepress/             # GENERATED from manifest.yaml each build (gitignored)
-└── site/                   # build output (gitignored; not "dist" — see above)
-    ├── index.html          #   landing page linking each printout
-    ├── blog/
-    └── slides/
-```
+presentation-sanity is the sibling of [document-sanity](https://github.com/yakaboskic/document-sanity), and both grew out of [meta-sanity](https://github.com/yakaboskic/meta-sanity): declare it once, generate the rest. It is a thin orchestration layer around [Slidev](https://sli.dev) (the deck), [VitePress](https://vitepress.dev) (the blog, chosen because it shares Slidev's substrate) and [manim](https://www.manim.community/) (the animations, pre-rendered and cached).
 
-## manifest.yaml
-
-```yaml
-metadata:
-  title: "My Subject"
-  description: "One line, used as the blog's meta description"
-  authors:
-    - { name: "Your Name", email: "you@example.com" }
-
-outputs:                    # one entry per printout; omit for a lone deck
-  blog:
-    engine: vitepress
-    entry: blog.md
-    out: site/blog
-  slides:
-    engine: slidev
-    entry: slides.md
-    out: site/slides
-    theme: seriph           # any Slidev theme id, package, or local path
-
-variables:
-  num_samples:
-    value: 12453
-    format: ","             # Python-style spec: , .2e .3f .1%
-    description: "Total samples after QC"
-    source: "data/results.csv"        # single-file input (informational)
-    # — or — for multi-file inputs:
-    # data:
-    #   - "data/results.csv"
-    #   - "data/cohort_metadata.tsv"
-    command: "python scripts/fit.py"  # informational — not executed
-    updated: "2026-04-29"
-
-scenes:
-  intro:
-    source: "scenes/intro.py"
-    class: "IntroScene"
-    quality: "h"            # l | m | h | p | k
-    format: "webm"
-
-figures:
-  pipeline:
-    source: "excalidraw/pipeline.excalidraw"
-    format: "svg"           # svg | png  (default svg)
-    scale: 1                # export scale (default 1)
-    background: false       # transparent by default
-    dark: false             # dark-mode export
-    embed_scene: false      # embed editable scene data in the export
-```
-
-## Content patterns
-
-**Variable with provenance panel** — identical in both outputs:
-
-```markdown
-We analyzed <DataValue var="num_samples" /> samples.
-```
-
-Click the underlined value and a panel slides in from the right showing
-`inputs → command → variable` as a vertical graph.
-
-**A manim scene, two ways.** Full-screen slide (Slidev):
-
-```markdown
----
-layout: manim
-scene: intro
 ---
 
-(optional caption text — overlaid at bottom)
-```
-
-Inline figure (VitePress) — plays when scrolled into view, pauses when scrolled
-out, so a long post with several scenes doesn't run them all at once:
-
-```markdown
-<ManimFigure scene="intro" caption="What this shows." />
-```
-
-Both read `public/manim/intro.webm` plus the last-frame poster that
-`build-manim` extracts with ffmpeg, so the finished diagram shows wherever the
-video can't play (initial paint, PDF/PPTX export, print).
-
-> **Writing tip.** Keep a component tag off the *start* of a line in markdown —
-> markdown-it treats a line beginning with `<Tag` as an HTML *block* and closes
-> the surrounding paragraph around it. Wrap so the tag lands mid-line.
-
-**Static hosting:** `site/` is fully self-contained. The deck uses **hash
-routing** and the blog builds real `.html` routes (`cleanUrls: false`), so both
-work on any dumb static host (S3, R2, GitHub Pages, Netlify) with no SPA
-fallback or rewrite configuration.
-
-## System dependencies
-
-Only required when you want to **render manim scenes locally** (i.e.,
-when you've installed the `[manim]` extra):
-
-- macOS: `brew install ffmpeg cairo pango`
-- Linux: `apt install ffmpeg libcairo2-dev libpango1.0-dev` (or distro equivalent)
-- LaTeX is required for `MathTex`. Install [TeX Live](https://tug.org/texlive/) or BasicTeX.
-
-If you're just building/deploying a subject whose videos are already
-rendered (committed in `public/manim/`), you don't need any of these.
-Install with `uv sync --no-default-groups` (no `manim` group), and
-`presentation-sanity build` auto-skips manim with a log line and runs the
-renderers against the existing videos. Pass `--skip-manim` explicitly if you
-want the same behavior even when manim *is* installed.
-
-## Library inspiration
-
-- [document-sanity](https://github.com/yakaboskic/document-sanity) — sibling
-  project; the manifest/variable/versioning philosophy is shared.
-- [Slidev](https://sli.dev) — renders the deck. presentation-sanity is a thin
-  orchestration layer around it.
-- [VitePress](https://vitepress.dev) — renders the blog. Chosen because it
-  shares Slidev's substrate (Vite + Vue 3 + markdown-it + Shiki), which is what
-  lets one `components/` directory and one manifest back both outputs.
-- [manim](https://www.manim.community/) — the math animation engine. Scenes
-  are pre-rendered; presentation-sanity handles caching and pathing.
+<sub>Part of <a href="https://sanitism.dev">Sanitism</a>. Also in the family: <a href="https://github.com/yakaboskic/document-sanity">document-sanity</a> for papers and proposals. MIT licensed.</sub>

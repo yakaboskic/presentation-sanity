@@ -17,7 +17,7 @@ side in a grouping folder:
 ```
 presentations/kickoff/v1/        id kickoff/v1
 presentations/kickoff/nih/       id kickoff/nih
-presentations/ashg-2026/         id ashg-2026
+presentations/lab-meeting/       id lab-meeting
 ```
 
 Presentations don't nest. If `kickoff` is itself a presentation (it has a
@@ -28,7 +28,7 @@ Presentations don't nest. If `kickoff` is itself a presentation (it has a
 
 ```bash
 uv run presentation-sanity new kickoff/nih --from kickoff/v1 --title "Kickoff (NIH review)"
-uv run presentation-sanity new ashg-2026 --title "Genetics as an anchor"
+uv run presentation-sanity new lab-meeting --title "Where the numbers come from"
 ```
 
 `--from` copies the folder (skipping exports and Slidev scratch state), sets
