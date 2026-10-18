@@ -441,8 +441,8 @@ once), so no token is stored anywhere.
    `__version__` in `src/presentation_sanity/__init__.py`, `metadata.version`
    in `skills/presentation-sanity/SKILL.md`, and `version` in
    `.claude-plugin/plugin.json` (`tests/test_skill.py` fails until they
-   agree). Update the versions in the snippets above (the `@X.Y.Z` pin, the
-   git+ fallback, the dependency line) and in the skill's `init` mode.
+   agree). Update the tags in the snippets above and in the skill's `init`
+   mode.
 2. In `presentation-sanity-template`, move the pin to the new tag (the
    `pyproject.toml` dependency line and the README's mentions), regenerate the
    demo workflow with `presentation-sanity pages init --force --only-repo
