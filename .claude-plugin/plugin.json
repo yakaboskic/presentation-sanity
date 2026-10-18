@@ -1,0 +1,13 @@
+{
+  "name": "presentation-sanity",
+  "version": "0.4.0",
+  "description": "Talks from one manifest.yaml: Slidev decks, VitePress posts, manim scenes and numbers with provenance. /presentation-sanity [init | new | slides | blog | manim | figures | variables | cite | export | check | deploy]. Part of Sanitism.",
+  "author": {
+    "name": "yakaboskic",
+    "url": "https://github.com/yakaboskic"
+  },
+  "homepage": "https://sanitism.dev",
+  "repository": "https://github.com/yakaboskic/presentation-sanity",
+  "license": "MIT",
+  "keywords": ["slidev", "vitepress", "manim", "presentations", "provenance", "sanitism"]
+}
