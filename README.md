@@ -379,7 +379,7 @@ requires-python = ">=3.10"
 # Pin a release tag (https://github.com/yakaboskic/presentation-sanity/releases),
 # not @main; to upgrade, change the tag and run `uv lock`.
 dependencies = [
-    "presentation-sanity @ git+https://github.com/yakaboskic/presentation-sanity.git@v0.4.2",
+    "presentation-sanity @ git+https://github.com/yakaboskic/presentation-sanity.git@v0.4.3",
 ]
 
 # manim (the machine needs ffmpeg, cairo, pango and LaTeX). A default group:

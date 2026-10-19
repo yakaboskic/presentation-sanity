@@ -1,6 +1,6 @@
 {
   "name": "presentation-sanity",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "description": "Talks from one manifest.yaml: Slidev decks, VitePress posts, manim scenes and numbers with provenance. /presentation-sanity [init | new | slides | blog | manim | figures | variables | cite | export | check | deploy]. Part of Sanitism.",
   "author": {
     "name": "yakaboskic",

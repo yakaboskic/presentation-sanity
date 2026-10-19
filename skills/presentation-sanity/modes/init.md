@@ -28,7 +28,7 @@ reached, or the user wants a GitHub release, run it from a tag
 (https://github.com/yakaboskic/presentation-sanity/releases) instead:
 
 ```bash
-uvx --from "presentation-sanity @ git+https://github.com/yakaboskic/presentation-sanity.git@v0.4.2" \
+uvx --from "presentation-sanity @ git+https://github.com/yakaboskic/presentation-sanity.git@v0.4.3" \
   presentation-sanity init DIR --yes --title "Title" --first kickoff
 ```
 

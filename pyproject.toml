@@ -1,6 +1,6 @@
 [project]
 name = "presentation-sanity"
-version = "0.4.2"
+version = "0.4.3"
 description = "Build slides and blogs from a single manifest.yaml — one project, many presentations and versions sharing variables, provenance, manim scenes and figures, rendered by Slidev and VitePress."
 # readme: dynamic, README.md with its relative links made absolute for PyPI
 # (see [tool.hatch.metadata.hooks.fancy-pypi-readme] below).
