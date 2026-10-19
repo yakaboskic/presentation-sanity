@@ -2,9 +2,25 @@
 name = "presentation-sanity"
 version = "0.4.2"
 description = "Build slides and blogs from a single manifest.yaml — one project, many presentations and versions sharing variables, provenance, manim scenes and figures, rendered by Slidev and VitePress."
-readme = "README.md"
+# readme: dynamic, README.md with its relative links made absolute for PyPI
+# (see [tool.hatch.metadata.hooks.fancy-pypi-readme] below).
+dynamic = ["readme"]
 requires-python = ">=3.10"
-license = {text = "MIT"}
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Chase Yakaboski" }]
+keywords = ["slidev", "vitepress", "manim", "presentations", "provenance", "sanitism"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Multimedia :: Graphics :: Presentation",
+    "Topic :: Scientific/Engineering :: Visualization",
+    "Topic :: Text Processing :: Markup :: Markdown",
+]
 dependencies = [
     "pyyaml>=6.0",
 ]
@@ -16,12 +32,51 @@ pptx = ["python-pptx>=0.6"]
 [dependency-groups]
 dev = ["pytest>=8"]
 
+[project.urls]
+Homepage = "https://sanitism.dev"
+Documentation = "https://github.com/yakaboskic/presentation-sanity#readme"
+Repository = "https://github.com/yakaboskic/presentation-sanity"
+Issues = "https://github.com/yakaboskic/presentation-sanity/issues"
+Changelog = "https://github.com/yakaboskic/presentation-sanity/releases"
+Demo = "https://presentation.sanitism.dev"
+
 [project.scripts]
 presentation-sanity = "presentation_sanity.cli:main"
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling>=1.27", "hatch-fancy-pypi-readme>=24.1"]
 build-backend = "hatchling.build"
+
+# The PyPI page is the README, but pypi.org can't follow its relative links
+# (.github/…) or in-page anchors, so they're pointed at GitHub there. Other
+# `](…)` in the README are code samples and stay as they are; so does the
+# README in the repo.
+[tool.hatch.metadata.hooks.fancy-pypi-readme]
+content-type = "text/markdown"
+
+[[tool.hatch.metadata.hooks.fancy-pypi-readme.fragments]]
+path = "README.md"
+
+[[tool.hatch.metadata.hooks.fancy-pypi-readme.substitutions]]
+pattern = '\]\(#'
+replacement = '](https://github.com/yakaboskic/presentation-sanity#'
+
+[[tool.hatch.metadata.hooks.fancy-pypi-readme.substitutions]]
+pattern = '\]\((?:\./)?(\.github(?:/[^)]*)?)\)'
+replacement = '](https://github.com/yakaboskic/presentation-sanity/blob/main/\1)'
+
+# Only what a source build needs (and its tests): nothing local or untracked
+# from the working tree, like .claude/settings.local.json.
+[tool.hatch.build.targets.sdist]
+include = [
+    "/README.md",
+    "/src",
+    "/skills",
+    "/tests",
+    "/scripts",
+    "/.claude-plugin",
+    "/uv.lock",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/presentation_sanity"]

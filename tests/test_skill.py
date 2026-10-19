@@ -38,7 +38,8 @@ def test_modes_only_mention_real_commands() -> None:
     commands = set(build_parser()._subparsers._group_actions[0].choices)  # noqa: SLF001
     skill = bundled_skill()
     text = "\n".join(skill[k].decode() for k in skill if k.endswith(".md"))
-    used = set(re.findall(r"uv run (?:--with \S+ )?presentation-sanity ([a-z][a-z-]*)", text))
+    used = set(re.findall(
+        r"(?:uv run (?:--with \S+ )?|uvx )presentation-sanity(?:@\S+)? ([a-z][a-z-]*)", text))
     assert used and used <= commands, used - commands
 
 
